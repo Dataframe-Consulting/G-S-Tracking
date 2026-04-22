@@ -108,3 +108,23 @@ export interface UserProfile {
   nombre: string | null;
   created_at: string;
 }
+
+export interface Cliente {
+  id: string;
+  nombre: string;
+  contacto: string | null;
+  created_at: string;
+}
+
+export interface LugarCarga {
+  id: string;
+  nombre: string;
+  created_at: string;
+}
+
+export interface Transportista {
+  id: string;
+  nombre: string;
+  contacto: string | null;
+  created_at: string;
+}

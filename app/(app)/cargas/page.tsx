@@ -15,15 +15,15 @@ export default async function CargasPage() {
   const cargas = (data ?? []) as Carga[];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Cargas</h1>
-          <p className="text-sm text-slate-500">Últimas 200 cargas registradas.</p>
+          <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">Cargas</h1>
+          <p className="text-sm text-brand-500 mt-0.5">Últimas 200 cargas registradas.</p>
         </div>
         <Link
           href="/cargas/nueva"
-          className="rounded-lg bg-brand-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800"
+          className="rounded-xl bg-brand-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 transition shadow-sm"
         >
           + Nueva carga
         </Link>

@@ -6,22 +6,24 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#085041",
-          50: "#e8f3f0",
-          100: "#c5e0d9",
-          200: "#9ecbbf",
-          300: "#75b5a4",
-          400: "#52a28e",
-          500: "#2f8f78",
-          600: "#1f7362",
-          700: "#14604f",
-          800: "#0a553f",
-          900: "#085041",
-          950: "#043327"
-        }
+          DEFAULT: "#1D3D29",
+          50:  "#F5F2EB",  // Cream — light text on dark / page bg
+          100: "#e0ebe3",
+          200: "#b8d0bc",
+          300: "#8fb594",
+          400: "#659a6b",
+          500: "#3E8051",  // Leaf — secondary / focus rings
+          600: "#316644",
+          700: "#264f35",  // Active nav
+          800: "#1e3e2a",  // Hover states
+          900: "#1D3D29",  // Forest — primary / sidebar bg
+          950: "#0f2117"
+        },
+        accent: "#C47D28"  // Amber — GPS / accent
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"]
+        sans:    ["var(--font-sans)",    "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "system-ui", "sans-serif"]
       }
     }
   },

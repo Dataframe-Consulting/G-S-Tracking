@@ -24,64 +24,86 @@ export default async function AlertasPage() {
     }>) ?? [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Alertas</h1>
-        <p className="text-sm text-slate-500">Últimas 100 alertas registradas.</p>
+        <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">Alertas</h1>
+        <p className="text-sm text-brand-500 mt-0.5">Últimas 100 alertas registradas.</p>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-            <tr>
-              <th className="text-left px-3 py-2">Fecha</th>
-              <th className="text-left px-3 py-2">Tipo</th>
-              <th className="text-left px-3 py-2">Temp</th>
-              <th className="text-left px-3 py-2">Carga</th>
-              <th className="text-left px-3 py-2">Destinatario</th>
-              <th className="text-left px-3 py-2">Estado envío</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-10 text-center text-slate-500">
-                  Sin alertas registradas.
-                </td>
+
+      <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="bg-brand-900 text-brand-50 text-xs uppercase tracking-widest">
+                <th className="text-left px-4 py-3 font-medium">Fecha</th>
+                <th className="text-left px-4 py-3 font-medium">Tipo</th>
+                <th className="text-left px-4 py-3 font-medium">Temp</th>
+                <th className="text-left px-4 py-3 font-medium">Carga</th>
+                <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Destinatario</th>
+                <th className="text-left px-4 py-3 font-medium">Envío</th>
               </tr>
-            ) : (
-              rows.map((a) => (
-                <tr key={a.id}>
-                  <td className="px-3 py-2 text-xs text-slate-500">
-                    {new Date(a.created_at).toLocaleString("es-MX")}
-                  </td>
-                  <td className="px-3 py-2">
-                    {a.tipo === "TEMP_ALTA" ? "🔴 ALTA" : "🔵 BAJA"}
-                  </td>
-                  <td className="px-3 py-2 font-semibold">
-                    {a.temperatura != null ? `${Number(a.temperatura).toFixed(1)}°C` : "—"}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs">
-                    {a.carga ? (
-                      <Link href={`/cargas/${a.carga.id}`} className="text-brand-700 hover:underline">
-                        {a.carga.ov_ref} · {a.carga.cliente}
-                      </Link>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs">{a.enviado_a ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {a.whatsapp_sid ? (
-                      <span className="text-emerald-700">Enviado</span>
-                    ) : (
-                      <span className="text-amber-700">Sin envío</span>
-                    )}
+            </thead>
+            <tbody className="divide-y divide-brand-50">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-brand-400">
+                    Sin alertas registradas.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                rows.map((a) => (
+                  <tr key={a.id} className="hover:bg-brand-50/60 transition-colors">
+                    <td className="px-4 py-3 text-xs text-brand-500 tabular-nums whitespace-nowrap">
+                      {new Date(a.created_at).toLocaleString("es-MX")}
+                    </td>
+                    <td className="px-4 py-3 font-medium">
+                      {a.tipo === "TEMP_ALTA" ? (
+                        <span className="text-red-600">🔴 ALTA</span>
+                      ) : (
+                        <span className="text-blue-600">🔵 BAJA</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-brand-900 tabular-nums">
+                      {a.temperatura != null ? `${Number(a.temperatura).toFixed(1)}°C` : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.carga ? (
+                        <Link
+                          href={`/cargas/${a.carga.id}`}
+                          className="text-brand-700 hover:text-accent transition-colors font-medium"
+                        >
+                          <div className="font-mono text-xs">{a.carga.ov_ref}</div>
+                          <div className="text-sm">{a.carga.cliente}</div>
+                        </Link>
+                      ) : (
+                        <span className="text-brand-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-brand-500 hidden md:table-cell">
+                      {a.enviado_a ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.whatsapp_sid ? (
+                        <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                          Enviado
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full">
+                          Sin envío
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {rows.length > 0 && (
+          <div className="px-4 py-2 border-t border-brand-50 text-xs text-brand-400 text-right">
+            {rows.length} alerta{rows.length !== 1 ? "s" : ""}
+          </div>
+        )}
       </div>
     </div>
   );

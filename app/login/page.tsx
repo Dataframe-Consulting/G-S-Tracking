@@ -6,16 +6,20 @@ export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen grid place-items-center bg-gradient-to-br from-brand-900 via-brand-800 to-emerald-700 p-6">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <LeafLogo className="w-10 h-10 text-brand-900" />
+    <main className="min-h-screen grid place-items-center bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 p-6">
+      <div className="w-full max-w-md rounded-2xl bg-brand-50 shadow-2xl p-8">
+        <div className="flex items-center gap-3 mb-8">
+          <LeafLogo className="w-11 h-11 text-brand-900" />
           <div>
-            <div className="text-xl font-bold tracking-tight text-brand-900">AgroTrack</div>
-            <div className="text-xs text-slate-500">Gestión logística agrónoma</div>
+            <div className="font-display font-extrabold text-xl tracking-widest text-brand-900">
+              AGROTRACK
+            </div>
+            <div className="text-[11px] tracking-widest uppercase text-brand-500">
+              Agriculture Logistics
+            </div>
           </div>
         </div>
-        <Suspense fallback={<div className="text-sm text-slate-500">Cargando…</div>}>
+        <Suspense fallback={<div className="text-sm text-brand-500">Cargando…</div>}>
           <LoginForm />
         </Suspense>
       </div>

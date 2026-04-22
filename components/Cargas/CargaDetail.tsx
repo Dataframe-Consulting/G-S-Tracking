@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -14,6 +13,26 @@ import { AlertaBanner } from "@/components/Alertas/AlertaBanner";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 const MapaTracker = dynamic(() => import("@/components/Mapa/MapaTracker"), { ssr: false });
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <span className="font-display font-semibold text-brand-900 text-sm uppercase tracking-widest">
+        {children}
+      </span>
+      <div className="flex-1 h-px bg-brand-100" />
+    </div>
+  );
+}
+
+function InfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-brand-100 bg-white px-4 py-3">
+      <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">{label}</div>
+      <div className="text-sm font-medium text-brand-900">{value}</div>
+    </div>
+  );
+}
 
 export function CargaDetail({
   carga: initialCarga,
@@ -98,7 +117,6 @@ export function CargaDetail({
     }
   }
 
-  // Auto-refresh every 3 minutes + realtime subscription for this carga
   useEffect(() => {
     const supabase = createBrowserSupabase();
     const channel = supabase
@@ -131,22 +149,24 @@ export function CargaDetail({
   }, [carga.id, router]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-6">
+
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="font-mono text-xs text-slate-500">{carga.ov_ref}</div>
-          <h1 className="text-2xl font-bold text-slate-900">{carga.cliente}</h1>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="font-mono text-xs text-brand-400 mb-1">{carga.ov_ref}</div>
+          <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">
+            {carga.cliente}
+          </h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <StatusBadge status={status} large />
             <select
               value={status}
               onChange={(e) => updateStatus(e.target.value as Status)}
-              className="text-sm rounded-md border border-slate-300 px-2 py-1 bg-white"
+              className="text-sm rounded-xl border border-brand-200 px-3 py-1.5 bg-white text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               {STATUS_VALUES.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
-                </option>
+                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
               ))}
             </select>
           </div>
@@ -154,9 +174,9 @@ export function CargaDetail({
         <button
           onClick={doSync}
           disabled={syncing || !carga.termografo_id}
-          className="rounded-lg bg-brand-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
+          className="rounded-xl bg-brand-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 transition shadow-sm"
         >
-          {syncing ? "Sincronizando..." : "Sincronizar ahora"}
+          {syncing ? "Sincronizando…" : "Sincronizar ahora"}
         </button>
       </div>
 
@@ -167,186 +187,191 @@ export function CargaDetail({
         tempMax={tempMax}
       />
 
-      <div className="grid md:grid-cols-2 gap-3">
-        <InfoCell label="Fecha carga" value={carga.fecha_carga} />
-        <InfoCell label="Fecha entrega" value={carga.fecha_entrega} />
-        <InfoCell label="Cita" value={carga.cita ?? "—"} />
-        <InfoCell label="Lugar de carga" value={carga.lugar_carga} />
-        <InfoCell
-          label="Producto (rango)"
-          value={
-            carga.producto
-              ? `${carga.producto.nombre} · ${tempMin}°–${tempMax}°`
-              : "—"
-          }
-        />
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Termógrafo</div>
-          {carga.termografo_id && !editingTermografo ? (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium font-mono text-slate-800">{carga.termografo_id}</span>
-              <button
-                onClick={() => { setEditingTermografo(true); setTermografoInput(carga.termografo_id ?? ""); }}
-                className="text-xs text-brand-700 hover:underline"
-              >
-                Cambiar
-              </button>
+      {/* Info grid */}
+      <div>
+        <SectionHeader>Detalles</SectionHeader>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <InfoCell label="Fecha carga" value={carga.fecha_carga} />
+          <InfoCell label="Fecha entrega" value={carga.fecha_entrega} />
+          <InfoCell label="Cita" value={carga.cita ?? "—"} />
+          <InfoCell label="Lugar de carga" value={carga.lugar_carga} />
+          <InfoCell
+            label="Producto (rango)"
+            value={carga.producto ? `${carga.producto.nombre} · ${tempMin}°–${tempMax}°` : "—"}
+          />
+          <InfoCell label="Flete" value={carga.flete_cargo ?? "—"} />
+          <InfoCell
+            label="Última lectura"
+            value={carga.ultima_lectura ? new Date(carga.ultima_lectura).toLocaleString("es-MX") : "—"}
+          />
+
+          {/* Termógrafo cell */}
+          <div className="rounded-xl border border-brand-100 bg-white px-4 py-3">
+            <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">
+              Termógrafo
             </div>
-          ) : editingTermografo || !carga.termografo_id ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="ID del termógrafo"
-                value={termografoInput}
-                onChange={(e) => setTermografoInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && assignTermografo()}
-                className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <button
-                onClick={assignTermografo}
-                disabled={savingTermografo || !termografoInput.trim()}
-                className="rounded-md bg-brand-900 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
-              >
-                {savingTermografo ? "..." : "Guardar"}
-              </button>
-              {editingTermografo && (
+            {carga.termografo_id && !editingTermografo ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium font-mono text-brand-900">{carga.termografo_id}</span>
                 <button
-                  onClick={() => setEditingTermografo(false)}
-                  className="text-xs text-slate-500 hover:text-slate-700"
+                  onClick={() => { setEditingTermografo(true); setTermografoInput(carga.termografo_id ?? ""); }}
+                  className="text-xs text-accent hover:underline"
                 >
-                  Cancelar
+                  Cambiar
                 </button>
-              )}
-            </div>
-          ) : null}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="ID del termógrafo"
+                  value={termografoInput}
+                  onChange={(e) => setTermografoInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && assignTermografo()}
+                  className="flex-1 rounded-lg border border-brand-200 px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <button
+                  onClick={assignTermografo}
+                  disabled={savingTermografo || !termografoInput.trim()}
+                  className="rounded-lg bg-brand-900 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
+                >
+                  {savingTermografo ? "…" : "Guardar"}
+                </button>
+                {editingTermografo && (
+                  <button
+                    onClick={() => setEditingTermografo(false)}
+                    className="text-xs text-brand-400 hover:text-brand-700"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-        <InfoCell label="Flete" value={carga.flete_cargo ?? "—"} />
-        <InfoCell
-          label="Última lectura"
-          value={
-            carga.ultima_lectura
-              ? new Date(carga.ultima_lectura).toLocaleString("es-MX")
-              : "—"
-          }
-        />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+      {/* Descripción */}
+      <div className="bg-white rounded-xl border border-brand-100 px-5 py-4">
+        <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">
           Descripción del producto
         </div>
-        <div className="whitespace-pre-wrap text-sm text-slate-800">
+        <div className="whitespace-pre-wrap text-sm text-brand-900 leading-relaxed">
           {carga.producto_descripcion}
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden h-96">
-          <MapaTracker
-            position={position}
-            path={path}
-            outOfRange={!!carga.alerta_activa}
-            title={carga.ov_ref}
-          />
+      {/* Mapa + Temperatura */}
+      <div>
+        <SectionHeader>Monitoreo</SectionHeader>
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="rounded-2xl border border-brand-100 bg-white overflow-hidden h-96 shadow-sm">
+            <MapaTracker
+              position={position}
+              path={path}
+              outOfRange={!!carga.alerta_activa}
+              title={carga.ov_ref}
+            />
+          </div>
+          <div className="space-y-3">
+            {tempMin != null && tempMax != null ? (
+              <>
+                <TempGauge
+                  value={carga.temp_actual != null ? Number(carga.temp_actual) : null}
+                  min={tempMin}
+                  max={tempMax}
+                />
+                <TempChart lecturas={lecturas} min={tempMin} max={tempMax} />
+              </>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-brand-200 p-8 text-sm text-brand-500 bg-white text-center">
+                <div className="text-3xl mb-2">🌡️</div>
+                Asigna un producto para habilitar el monitoreo por rango de temperatura.
+              </div>
+            )}
+          </div>
         </div>
-        <div className="space-y-3">
-          {tempMin != null && tempMax != null ? (
-            <>
-              <TempGauge
-                value={carga.temp_actual != null ? Number(carga.temp_actual) : null}
-                min={tempMin}
-                max={tempMax}
-              />
-              <TempChart lecturas={lecturas} min={tempMin} max={tempMax} />
-            </>
-          ) : (
-            <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 bg-white">
-              Asigna un producto para habilitar el monitoreo por rango de temperatura.
+      </div>
+
+      {/* Lecturas + Alertas */}
+      <div>
+        <SectionHeader>Historial</SectionHeader>
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-brand-50 font-display font-semibold text-sm text-brand-900 uppercase tracking-widest">
+              Últimas lecturas
             </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-slate-200 bg-white">
-          <div className="px-4 py-3 border-b border-slate-200 text-sm font-medium">
-            Últimas lecturas
-          </div>
-          {lecturas.length === 0 ? (
-            <div className="p-4 text-sm text-slate-500">Sin lecturas aún.</div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="text-left px-3 py-2">Hora</th>
-                  <th className="text-left px-3 py-2">Temp</th>
-                  <th className="text-left px-3 py-2">Ubicación</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lecturas.slice(0, 10).map((l) => (
-                  <tr key={l.id} className="border-t border-slate-100">
-                    <td className="px-3 py-1.5">
-                      {new Date(l.timestamp).toLocaleTimeString("es-MX")}
-                    </td>
-                    <td className={`px-3 py-1.5 font-semibold ${l.fuera_rango ? "text-red-600" : "text-slate-800"}`}>
-                      {Number(l.temperatura).toFixed(1)}°C
-                    </td>
-                    <td className="px-3 py-1.5 font-mono text-xs text-slate-500">
-                      {l.lat != null && l.lng != null
-                        ? `${Number(l.lat).toFixed(3)}, ${Number(l.lng).toFixed(3)}`
-                        : "—"}
-                    </td>
+            {lecturas.length === 0 ? (
+              <div className="p-6 text-sm text-brand-400 text-center">Sin lecturas aún.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-brand-50 text-xs uppercase text-brand-400 tracking-wide">
+                  <tr>
+                    <th className="text-left px-4 py-2">Hora</th>
+                    <th className="text-left px-4 py-2">Temp</th>
+                    <th className="text-left px-4 py-2 hidden sm:table-cell">Ubicación</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white">
-          <div className="px-4 py-3 border-b border-slate-200 text-sm font-medium">
-            Alertas enviadas
+                </thead>
+                <tbody>
+                  {lecturas.slice(0, 10).map((l) => (
+                    <tr key={l.id} className="border-t border-brand-50">
+                      <td className="px-4 py-2 text-brand-600 tabular-nums">
+                        {new Date(l.timestamp).toLocaleTimeString("es-MX")}
+                      </td>
+                      <td className={`px-4 py-2 font-semibold tabular-nums ${l.fuera_rango ? "text-red-600" : "text-brand-900"}`}>
+                        {Number(l.temperatura).toFixed(1)}°C
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs text-brand-400 hidden sm:table-cell">
+                        {l.lat != null && l.lng != null
+                          ? `${Number(l.lat).toFixed(3)}, ${Number(l.lng).toFixed(3)}`
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
-          {alertas.length === 0 ? (
-            <div className="p-4 text-sm text-slate-500">Sin alertas.</div>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {alertas.map((a) => (
-                <li key={a.id} className="px-4 py-2 text-sm flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">
-                      {a.tipo === "TEMP_ALTA" ? "🔴 Temp ALTA" : "🔵 Temp BAJA"}
-                      {a.temperatura != null && (
-                        <span className="ml-2 text-slate-600">
-                          {Number(a.temperatura).toFixed(1)}°C
-                        </span>
-                      )}
+
+          <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-brand-50 font-display font-semibold text-sm text-brand-900 uppercase tracking-widest">
+              Alertas enviadas
+            </div>
+            {alertas.length === 0 ? (
+              <div className="p-6 text-sm text-brand-400 text-center">Sin alertas.</div>
+            ) : (
+              <ul className="divide-y divide-brand-50">
+                {alertas.map((a) => (
+                  <li key={a.id} className="px-5 py-3 text-sm flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-brand-900">
+                        {a.tipo === "TEMP_ALTA" ? "🔴 Temp ALTA" : "🔵 Temp BAJA"}
+                        {a.temperatura != null && (
+                          <span className="ml-2 text-brand-500">
+                            {Number(a.temperatura).toFixed(1)}°C
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-brand-400 mt-0.5">
+                        {new Date(a.created_at).toLocaleString("es-MX")} · {a.enviado_a}
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-500">
-                      {new Date(a.created_at).toLocaleString("es-MX")} · {a.enviado_a}
-                    </div>
-                  </div>
-                  {a.whatsapp_sid ? (
-                    <span className="text-xs text-emerald-600">Enviado</span>
-                  ) : (
-                    <span className="text-xs text-amber-600">Sin envío</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+                    {a.whatsapp_sid ? (
+                      <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        Enviado
+                      </span>
+                    ) : (
+                      <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                        Sin envío
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function InfoCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="text-sm font-medium text-slate-800">{value}</div>
     </div>
   );
 }

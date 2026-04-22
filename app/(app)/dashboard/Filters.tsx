@@ -1,9 +1,22 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { STATUS_LABELS, STATUS_VALUES } from "@/lib/types";
+import type { Producto } from "@/lib/types";
 
-export function DashboardFilters({ fecha, status }: { fecha: string; status: string }) {
+const input =
+  "rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 text-brand-900";
+
+export function DashboardFilters({
+  fechaDesde,
+  fechaHasta,
+  productoId,
+  productos,
+}: {
+  fechaDesde: string;
+  fechaHasta: string;
+  productoId: string;
+  productos: Producto[];
+}) {
   const router = useRouter();
   const params = useSearchParams();
 
@@ -15,36 +28,45 @@ export function DashboardFilters({ fecha, status }: { fecha: string; status: str
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-xl p-3">
-      <label className="text-sm">
-        <span className="text-slate-600 mr-2">Fecha</span>
+    <div className="flex flex-wrap items-center gap-3 bg-white border border-brand-100 rounded-2xl px-4 py-3 shadow-sm">
+      <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">
+        Desde
         <input
           type="date"
-          value={fecha}
-          onChange={(e) => updateParam("fecha", e.target.value)}
-          className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+          value={fechaDesde}
+          onChange={(e) => updateParam("fecha_desde", e.target.value)}
+          className={input}
         />
       </label>
-      <label className="text-sm">
-        <span className="text-slate-600 mr-2">Status</span>
+      <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">
+        Hasta
+        <input
+          type="date"
+          value={fechaHasta}
+          onChange={(e) => updateParam("fecha_hasta", e.target.value)}
+          className={input}
+        />
+      </label>
+      <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">
+        Producto
         <select
-          value={status}
-          onChange={(e) => updateParam("status", e.target.value)}
-          className="rounded-md border border-slate-300 px-2 py-1 text-sm bg-white"
+          value={productoId}
+          onChange={(e) => updateParam("producto_id", e.target.value)}
+          className={`${input} bg-white`}
         >
           <option value="">Todos</option>
-          {STATUS_VALUES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
+          {productos.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nombre}
             </option>
           ))}
         </select>
       </label>
       <button
         onClick={() => router.push("/dashboard")}
-        className="text-xs text-slate-500 hover:text-slate-700 underline"
+        className="text-xs text-brand-400 hover:text-brand-700 underline underline-offset-2 transition"
       >
-        Limpiar
+        Limpiar filtros
       </button>
     </div>
   );

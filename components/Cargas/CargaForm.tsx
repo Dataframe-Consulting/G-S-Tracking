@@ -3,17 +3,34 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { STATUS_LABELS, STATUS_VALUES, type Producto, type Status } from "@/lib/types";
+import { type Producto, type Cliente, type Transportista } from "@/lib/types";
 
 const LUGAR_OPTIONS = ["FRIGO", "BODEGA", "CAMPO", "OTRO"];
 
+const field =
+  "mt-1 w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder:text-brand-300 transition";
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 pt-2">
+      <span className="font-display font-semibold text-brand-900 text-sm uppercase tracking-widest">
+        {children}
+      </span>
+      <div className="flex-1 h-px bg-brand-100" />
+    </div>
+  );
+}
+
 export function CargaForm({
-  productos
+  productos,
+  clientes,
+  transportistas,
 }: {
   productos: Producto[];
+  clientes: Cliente[];
+  transportistas: Transportista[];
 }) {
   const router = useRouter();
-
   const today = new Date().toISOString().slice(0, 10);
 
   const [form, setForm] = useState({
@@ -25,8 +42,7 @@ export function CargaForm({
     lugar_carga: "FRIGO",
     producto_descripcion: "",
     producto_id: "",
-    status: "PENDIENTE" as Status,
-    flete_cargo: ""
+    flete_cargo: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -42,10 +58,11 @@ export function CargaForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
+        status: "PENDIENTE",
         producto_id: form.producto_id || null,
         cita: form.cita || null,
-        flete_cargo: form.flete_cargo || null
-      })
+        flete_cargo: form.flete_cargo || null,
+      }),
     });
     setSaving(false);
     const json = await res.json();
@@ -58,14 +75,13 @@ export function CargaForm({
     router.refresh();
   }
 
-  const field = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500";
-  const label = "block text-sm";
-
   return (
-    <form onSubmit={submit} className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-      <div className="grid md:grid-cols-2 gap-4">
-        <label className={label}>
-          <span className="font-medium text-slate-700">Fecha de carga</span>
+    <form onSubmit={submit} className="bg-white rounded-2xl border border-brand-100 shadow-sm p-6 space-y-5">
+
+      <SectionTitle>Fechas y cliente</SectionTitle>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <label className="block text-sm font-medium text-brand-700">
+          Fecha de carga
           <input
             type="date"
             required
@@ -74,8 +90,8 @@ export function CargaForm({
             className={field}
           />
         </label>
-        <label className={label}>
-          <span className="font-medium text-slate-700">Fecha de entrega</span>
+        <label className="block text-sm font-medium text-brand-700">
+          Fecha de entrega
           <input
             type="date"
             required
@@ -84,8 +100,8 @@ export function CargaForm({
             className={field}
           />
         </label>
-        <label className={label}>
-          <span className="font-medium text-slate-700">Cita</span>
+        <label className="block text-sm font-medium text-brand-700">
+          Cita
           <input
             type="text"
             placeholder="6AM"
@@ -94,18 +110,34 @@ export function CargaForm({
             className={field}
           />
         </label>
-        <label className={label}>
-          <span className="font-medium text-slate-700">Cliente</span>
-          <input
-            type="text"
+        <label className="block text-sm font-medium text-brand-700">
+          Lugar de carga
+          <select
+            value={form.lugar_carga}
+            onChange={(e) => update("lugar_carga", e.target.value)}
+            className={`${field} bg-white`}
+          >
+            {LUGAR_OPTIONS.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm font-medium text-brand-700 lg:col-span-2">
+          Cliente
+          <select
             required
             value={form.cliente}
             onChange={(e) => update("cliente", e.target.value)}
-            className={field}
-          />
+            className={`${field} bg-white`}
+          >
+            <option value="">— Selecciona cliente —</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.nombre}>{c.nombre}</option>
+            ))}
+          </select>
         </label>
-        <label className={label}>
-          <span className="font-medium text-slate-700">OV / REF</span>
+        <label className="block text-sm font-medium text-brand-700">
+          OV / REF
           <input
             type="text"
             required
@@ -114,40 +146,25 @@ export function CargaForm({
             className={`${field} font-mono`}
           />
         </label>
-        <label className={label}>
-          <span className="font-medium text-slate-700">Lugar de carga</span>
+        <label className="block text-sm font-medium text-brand-700">
+          Flete a cargo
           <select
-            value={form.lugar_carga}
-            onChange={(e) => update("lugar_carga", e.target.value)}
+            value={form.flete_cargo}
+            onChange={(e) => update("flete_cargo", e.target.value)}
             className={`${field} bg-white`}
           >
-            {LUGAR_OPTIONS.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
+            <option value="">— Sin transportista —</option>
+            {transportistas.map((t) => (
+              <option key={t.id} value={t.nombre}>{t.nombre}</option>
             ))}
           </select>
         </label>
       </div>
 
-      <label className={label}>
-        <span className="font-medium text-slate-700">Descripción del producto</span>
-        <textarea
-          required
-          rows={3}
-          value={form.producto_descripcion}
-          onChange={(e) => update("producto_descripcion", e.target.value)}
-          placeholder="768 CAJAS AGUACATE CONVENCIONAL / 420 CAJAS AGUACATE ORGÁNICO"
-          className={field}
-        />
-        <span className="text-xs text-slate-500 block mt-1">
-          Texto libre — tal y como aparece en el Excel.
-        </span>
-      </label>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        <label className={label}>
-          <span className="font-medium text-slate-700">Producto (rango de temperatura)</span>
+      <SectionTitle>Producto</SectionTitle>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <label className="block text-sm font-medium text-brand-700">
+          Producto (rango de temperatura)
           <select
             value={form.producto_id}
             onChange={(e) => update("producto_id", e.target.value)}
@@ -161,46 +178,34 @@ export function CargaForm({
             ))}
           </select>
         </label>
-
-        <label className={label}>
-          <span className="font-medium text-slate-700">Status</span>
-          <select
-            value={form.status}
-            onChange={(e) => update("status", e.target.value as Status)}
-            className={`${field} bg-white`}
-          >
-            {STATUS_VALUES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className={label}>
-          <span className="font-medium text-slate-700">Flete a cargo</span>
-          <input
-            type="text"
-            value={form.flete_cargo}
-            onChange={(e) => update("flete_cargo", e.target.value)}
+        <label className="block text-sm font-medium text-brand-700 lg:col-span-3">
+          Descripción del producto
+          <textarea
+            required
+            rows={2}
+            value={form.producto_descripcion}
+            onChange={(e) => update("producto_descripcion", e.target.value)}
+            placeholder="768 CAJAS AGUACATE CONVENCIONAL / 420 CAJAS AGUACATE ORGÁNICO"
             className={field}
           />
+          <span className="text-xs text-brand-400 mt-1 block">
+            Texto libre — tal y como aparece en el Excel.
+          </span>
         </label>
-
       </div>
 
-      <div className="flex items-center gap-3 pt-2">
+      <div className="flex items-center gap-3 pt-2 border-t border-brand-100">
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-brand-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"
+          className="rounded-xl bg-brand-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60 transition shadow-sm"
         >
-          {saving ? "Guardando..." : "Crear carga"}
+          {saving ? "Guardando…" : "Crear carga"}
         </button>
         <button
           type="button"
           onClick={() => router.back()}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="rounded-xl border border-brand-200 px-6 py-2.5 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
         >
           Cancelar
         </button>
