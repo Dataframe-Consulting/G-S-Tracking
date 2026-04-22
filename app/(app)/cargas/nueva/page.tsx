@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
-import type { Producto, Termografo } from "@/lib/types";
+import type { Producto } from "@/lib/types";
 import { CargaForm } from "@/components/Cargas/CargaForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function NuevaCargaPage() {
   const supabase = createServerSupabase();
-  const [{ data: productos }, { data: termografos }] = await Promise.all([
-    supabase.from("productos").select("*").order("nombre"),
-    supabase.from("termografos").select("*").eq("asignado", false).order("id")
-  ]);
+  const { data: productos } = await supabase.from("productos").select("*").order("nombre");
 
   return (
     <div className="max-w-3xl space-y-5">
@@ -20,10 +17,7 @@ export default async function NuevaCargaPage() {
         </Link>
         <h1 className="text-2xl font-bold text-slate-900">Nueva carga</h1>
       </div>
-      <CargaForm
-        productos={(productos ?? []) as Producto[]}
-        termografosDisponibles={(termografos ?? []) as Termografo[]}
-      />
+      <CargaForm productos={(productos ?? []) as Producto[]} />
     </div>
   );
 }

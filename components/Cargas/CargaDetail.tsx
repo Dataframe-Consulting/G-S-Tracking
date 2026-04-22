@@ -29,6 +29,9 @@ export function CargaDetail({
   const [lecturas, setLecturas] = useState(initialLecturas);
   const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState<Status>(initialCarga.status);
+  const [termografoInput, setTermografoInput] = useState("");
+  const [savingTermografo, setSavingTermografo] = useState(false);
+  const [editingTermografo, setEditingTermografo] = useState(false);
 
   const tempMin = carga.producto ? Number(carga.producto.temp_min) : null;
   const tempMax = carga.producto ? Number(carga.producto.temp_max) : null;
@@ -70,6 +73,28 @@ export function CargaDetail({
     } else {
       toast.error("Error al actualizar");
       setStatus(carga.status);
+    }
+  }
+
+  async function assignTermografo() {
+    const id = termografoInput.trim();
+    if (!id) return;
+    setSavingTermografo(true);
+    const res = await fetch(`/api/cargas/${carga.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ termografo_id: id })
+    });
+    setSavingTermografo(false);
+    if (res.ok) {
+      setCarga((prev) => ({ ...prev, termografo_id: id }));
+      setTermografoInput("");
+      setEditingTermografo(false);
+      toast.success("Termógrafo asignado");
+      router.refresh();
+    } else {
+      const json = await res.json();
+      toast.error(json.error || "Error al asignar termógrafo");
     }
   }
 
@@ -155,7 +180,46 @@ export function CargaDetail({
               : "—"
           }
         />
-        <InfoCell label="Termógrafo" value={carga.termografo_id ?? "—"} />
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Termógrafo</div>
+          {carga.termografo_id && !editingTermografo ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium font-mono text-slate-800">{carga.termografo_id}</span>
+              <button
+                onClick={() => { setEditingTermografo(true); setTermografoInput(carga.termografo_id ?? ""); }}
+                className="text-xs text-brand-700 hover:underline"
+              >
+                Cambiar
+              </button>
+            </div>
+          ) : editingTermografo || !carga.termografo_id ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="ID del termógrafo"
+                value={termografoInput}
+                onChange={(e) => setTermografoInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && assignTermografo()}
+                className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <button
+                onClick={assignTermografo}
+                disabled={savingTermografo || !termografoInput.trim()}
+                className="rounded-md bg-brand-900 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
+              >
+                {savingTermografo ? "..." : "Guardar"}
+              </button>
+              {editingTermografo && (
+                <button
+                  onClick={() => setEditingTermografo(false)}
+                  className="text-xs text-slate-500 hover:text-slate-700"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
+          ) : null}
+        </div>
         <InfoCell label="Flete" value={carga.flete_cargo ?? "—"} />
         <InfoCell
           label="Última lectura"

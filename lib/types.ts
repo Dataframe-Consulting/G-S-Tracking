@@ -92,3 +92,19 @@ export interface Termografo {
   carga_id: string | null;
   ultima_actividad: string | null;
 }
+
+export type Role = "master" | "operador" | "visor";
+
+export const ROLE_LABELS: Record<Role, string> = {
+  master: "Master",
+  operador: "Operador",
+  visor: "Visor"
+};
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: Role;
+  nombre: string | null;
+  created_at: string;
+}

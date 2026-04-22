@@ -99,6 +99,23 @@ insert into termografos (id, nombre) values
 on conflict do nothing;
 
 -- ==========================================================================
+-- Perfiles de usuario y roles
+-- ==========================================================================
+create table if not exists user_profiles (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique,
+  role text not null default 'visor'
+    check (role in ('master', 'operador', 'visor')),
+  nombre text,
+  email text,
+  created_at timestamptz default now()
+);
+alter table user_profiles enable row level security;
+drop policy if exists "auth_all" on user_profiles;
+create policy "auth_all" on user_profiles for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+-- ==========================================================================
 -- Configuración (números de WhatsApp para alertas, settings globales)
 -- ==========================================================================
 create table if not exists config (

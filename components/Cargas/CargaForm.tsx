@@ -3,16 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { STATUS_LABELS, STATUS_VALUES, type Producto, type Status, type Termografo } from "@/lib/types";
+import { STATUS_LABELS, STATUS_VALUES, type Producto, type Status } from "@/lib/types";
 
 const LUGAR_OPTIONS = ["FRIGO", "BODEGA", "CAMPO", "OTRO"];
 
 export function CargaForm({
-  productos,
-  termografosDisponibles
+  productos
 }: {
   productos: Producto[];
-  termografosDisponibles: Termografo[];
 }) {
   const router = useRouter();
 
@@ -28,8 +26,7 @@ export function CargaForm({
     producto_descripcion: "",
     producto_id: "",
     status: "PENDIENTE" as Status,
-    flete_cargo: "",
-    termografo_id: ""
+    flete_cargo: ""
   });
   const [saving, setSaving] = useState(false);
 
@@ -46,7 +43,6 @@ export function CargaForm({
       body: JSON.stringify({
         ...form,
         producto_id: form.producto_id || null,
-        termografo_id: form.termografo_id || null,
         cita: form.cita || null,
         flete_cargo: form.flete_cargo || null
       })
@@ -191,26 +187,6 @@ export function CargaForm({
           />
         </label>
 
-        <label className={label}>
-          <span className="font-medium text-slate-700">Termógrafo</span>
-          <select
-            value={form.termografo_id}
-            onChange={(e) => update("termografo_id", e.target.value)}
-            className={`${field} bg-white`}
-          >
-            <option value="">— Sin asignar —</option>
-            {termografosDisponibles.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.id} · {t.nombre ?? ""}
-              </option>
-            ))}
-          </select>
-          {termografosDisponibles.length === 0 && (
-            <span className="text-xs text-amber-600 block mt-1">
-              No hay termógrafos disponibles.
-            </span>
-          )}
-        </label>
       </div>
 
       <div className="flex items-center gap-3 pt-2">

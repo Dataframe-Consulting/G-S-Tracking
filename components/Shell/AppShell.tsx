@@ -10,7 +10,6 @@ import toast from "react-hot-toast";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/cargas", label: "Cargas", icon: "🚚" },
-  { href: "/termografos", label: "Termógrafos", icon: "🌡️" },
   { href: "/alertas", label: "Alertas", icon: "⚠️" },
   { href: "/configuracion", label: "Configuración", icon: "⚙️" }
 ];
