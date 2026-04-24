@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerSupabase, createServiceSupabase } from "@/lib/supabase/server";
 import { PerfilForm } from "./PerfilForm";
+import { LogoEmpresa } from "@/components/configuracion/LogoEmpresa";
 
 export const dynamic = "force-dynamic";
 
@@ -66,21 +67,34 @@ export default async function ConfiguracionPage() {
   const service = createServiceSupabase();
 
   const { data: { user } } = await supabase.auth.getUser();
-  const { data: profile } = await service
-    .from("user_profiles")
-    .select("nombre, role")
-    .eq("user_id", user?.id ?? "")
-    .maybeSingle();
+  const [{ data: profile }, { data: empresaConfig }] = await Promise.all([
+    service
+      .from("user_profiles")
+      .select("nombre, role")
+      .eq("user_id", user?.id ?? "")
+      .maybeSingle(),
+    service
+      .from("empresa_config")
+      .select("logo_url")
+      .eq("id", 1)
+      .maybeSingle(),
+  ]);
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">
-          Configuración
-        </h1>
-        <p className="text-sm text-brand-500 mt-0.5">
-          Administra tu perfil y los catálogos de la plataforma.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">
+            Configuración
+          </h1>
+          <p className="text-sm text-brand-500 mt-0.5">
+            Administra tu perfil y los catálogos de la plataforma.
+          </p>
+        </div>
+        <LogoEmpresa
+          logoUrl={empresaConfig?.logo_url ?? null}
+          isMaster={profile?.role === "master"}
+        />
       </div>
 
       {/* Perfil */}
