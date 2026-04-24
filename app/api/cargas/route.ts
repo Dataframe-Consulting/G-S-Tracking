@@ -51,6 +51,7 @@ export async function POST(req: Request) {
     lugar_carga: body.lugar_carga,
     producto_descripcion: body.producto_descripcion,
     producto_id: body.producto_id ?? null,
+    producto_combinacion_id: body.producto_combinacion_id ?? null,
     status: body.status ?? "PENDIENTE",
     flete_cargo: body.flete_cargo ?? null,
     termografo_id: body.termografo_id ?? null

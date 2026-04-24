@@ -40,6 +40,16 @@ export interface Producto {
   temp_max: number;
 }
 
+export interface ProductoCombinacion {
+  id: string;
+  producto_a_id: string;
+  producto_b_id: string;
+  temp_min: number;
+  temp_max: number;
+  producto_a: { id: string; nombre: string };
+  producto_b: { id: string; nombre: string };
+}
+
 export interface Carga {
   id: string;
   fecha_carga: string;
@@ -50,6 +60,7 @@ export interface Carga {
   lugar_carga: string;
   producto_descripcion: string;
   producto_id: string | null;
+  producto_combinacion_id: string | null;
   status: Status;
   flete_cargo: string | null;
   termografo_id: string | null;

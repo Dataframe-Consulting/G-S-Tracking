@@ -1,12 +1,20 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { CatalogoClient } from "@/components/configuracion/CatalogoClient";
+import type { Producto } from "@/lib/types";
+import { ProductosClient } from "@/components/configuracion/ProductosClient";
+import type { Combinacion } from "@/components/configuracion/ProductosClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProductosPage() {
   const supabase = createServerSupabase();
-  const { data } = await supabase.from("productos").select("*").order("nombre");
+  const [{ data: productos }, { data: combinaciones }] = await Promise.all([
+    supabase.from("productos").select("*").order("nombre"),
+    supabase
+      .from("producto_combinaciones")
+      .select(`*, producto_a:productos!producto_a_id(id, nombre), producto_b:productos!producto_b_id(id, nombre)`)
+      .order("created_at"),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -21,14 +29,9 @@ export default async function ProductosPage() {
           Catálogo de productos con rangos de temperatura permitidos.
         </p>
       </div>
-      <CatalogoClient
-        endpoint="/api/productos"
-        initialData={data ?? []}
-        fields={[
-          { key: "nombre",   label: "Nombre del producto", placeholder: "Ej. Aguacate Orgánico", primary: true },
-          { key: "temp_min", label: "Temp. mínima (°C)", placeholder: "0",  type: "number" },
-          { key: "temp_max", label: "Temp. máxima (°C)", placeholder: "10", type: "number" }
-        ]}
+      <ProductosClient
+        productos={(productos ?? []) as Producto[]}
+        combinaciones={(combinaciones ?? []) as Combinacion[]}
       />
     </div>
   );

@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { AlertaLog, Carga, LecturaTemperatura, Status } from "@/lib/types";
+import type { AlertaLog, Carga, LecturaTemperatura, Producto, Status, Transportista } from "@/lib/types";
 import { STATUS_LABELS, STATUS_VALUES } from "@/lib/types";
 import { StatusBadge } from "./StatusBadge";
 import { TempGauge } from "@/components/Temperatura/TempGauge";
@@ -13,6 +13,25 @@ import { AlertaBanner } from "@/components/Alertas/AlertaBanner";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 const MapaTracker = dynamic(() => import("@/components/Mapa/MapaTracker"), { ssr: false });
+
+const LUGAR_OPTIONS = ["FRIGO", "BODEGA", "CAMPO", "OTRO"];
+
+type EditData = {
+  cliente: string;
+  ov_ref: string;
+  fecha_carga: string;
+  fecha_entrega: string;
+  cita: string;
+  lugar_carga: string;
+  producto_id: string;
+  producto_descripcion: string;
+  flete_cargo: string;
+};
+
+const bareInput =
+  "w-full text-sm font-medium text-brand-900 bg-transparent focus:outline-none placeholder:text-brand-300";
+const bareSelect =
+  "w-full text-sm font-medium text-brand-900 bg-transparent focus:outline-none cursor-pointer";
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
@@ -34,10 +53,19 @@ function InfoCell({ label, value }: { label: string; value: string }) {
   );
 }
 
+function EditCell({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-brand-300 bg-white px-4 py-3 ring-1 ring-brand-100">
+      <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+
 export function CargaDetail({
   carga: initialCarga,
   lecturas: initialLecturas,
-  alertas
+  alertas,
 }: {
   carga: Carga;
   lecturas: LecturaTemperatura[];
@@ -48,9 +76,28 @@ export function CargaDetail({
   const [lecturas, setLecturas] = useState(initialLecturas);
   const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState<Status>(initialCarga.status);
+
+  // Termógrafo inline edit
   const [termografoInput, setTermografoInput] = useState("");
   const [savingTermografo, setSavingTermografo] = useState(false);
   const [editingTermografo, setEditingTermografo] = useState(false);
+
+  // Edit mode
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editData, setEditData] = useState<EditData>({
+    cliente: "",
+    ov_ref: "",
+    fecha_carga: "",
+    fecha_entrega: "",
+    cita: "",
+    lugar_carga: "",
+    producto_id: "",
+    producto_descripcion: "",
+    flete_cargo: "",
+  });
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [transportistas, setTransportistas] = useState<Transportista[]>([]);
 
   const tempMin = carga.producto ? Number(carga.producto.temp_min) : null;
   const tempMax = carga.producto ? Number(carga.producto.temp_max) : null;
@@ -64,6 +111,79 @@ export function CargaDetail({
     .filter((l) => l.lat != null && l.lng != null)
     .reverse()
     .map((l) => ({ lat: Number(l.lat), lng: Number(l.lng) }));
+
+  function set<K extends keyof EditData>(key: K, value: EditData[K]) {
+    setEditData((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function startEdit() {
+    setEditData({
+      cliente: carga.cliente,
+      ov_ref: carga.ov_ref,
+      fecha_carga: carga.fecha_carga,
+      fecha_entrega: carga.fecha_entrega,
+      cita: carga.cita ?? "",
+      lugar_carga: carga.lugar_carga,
+      producto_id: carga.producto_id ?? "",
+      producto_descripcion: carga.producto_descripcion,
+      flete_cargo: carga.flete_cargo ?? "",
+    });
+    setEditing(true);
+    const fetches = [];
+    if (productos.length === 0)
+      fetches.push(fetch("/api/productos").then((r) => r.json()).then((j) => setProductos(j.data ?? [])));
+    if (transportistas.length === 0)
+      fetches.push(fetch("/api/transportistas").then((r) => r.json()).then((j) => setTransportistas(j.data ?? [])));
+    await Promise.all(fetches);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+  }
+
+  async function saveEdit() {
+    setSaving(true);
+    const res = await fetch(`/api/cargas/${carga.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cliente: editData.cliente,
+        ov_ref: editData.ov_ref,
+        fecha_carga: editData.fecha_carga,
+        fecha_entrega: editData.fecha_entrega,
+        cita: editData.cita || null,
+        lugar_carga: editData.lugar_carga,
+        producto_id: editData.producto_id || null,
+        producto_descripcion: editData.producto_descripcion,
+        flete_cargo: editData.flete_cargo || null,
+      }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      const updatedProducto = editData.producto_id
+        ? (productos.find((p) => p.id === editData.producto_id) ?? carga.producto)
+        : null;
+      setCarga((prev) => ({
+        ...prev,
+        cliente: editData.cliente,
+        ov_ref: editData.ov_ref,
+        fecha_carga: editData.fecha_carga,
+        fecha_entrega: editData.fecha_entrega,
+        cita: editData.cita || null,
+        lugar_carga: editData.lugar_carga,
+        producto_id: editData.producto_id || null,
+        producto: updatedProducto ?? null,
+        producto_descripcion: editData.producto_descripcion,
+        flete_cargo: editData.flete_cargo || null,
+      }));
+      setEditing(false);
+      toast.success("Cambios guardados");
+      router.refresh();
+    } else {
+      const json = await res.json();
+      toast.error(json.error || "Error al guardar");
+    }
+  }
 
   async function doSync() {
     setSyncing(true);
@@ -84,7 +204,7 @@ export function CargaDetail({
     const res = await fetch(`/api/cargas/${carga.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: next })
+      body: JSON.stringify({ status: next }),
     });
     if (res.ok) {
       toast.success("Status actualizado");
@@ -102,7 +222,7 @@ export function CargaDetail({
     const res = await fetch(`/api/cargas/${carga.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ termografo_id: id })
+      body: JSON.stringify({ termografo_id: id }),
     });
     setSavingTermografo(false);
     if (res.ok) {
@@ -153,11 +273,20 @@ export function CargaDetail({
 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="flex-1 min-w-0">
           <div className="font-mono text-xs text-brand-400 mb-1">{carga.ov_ref}</div>
-          <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">
-            {carga.cliente}
-          </h1>
+          {editing ? (
+            <input
+              type="text"
+              value={editData.cliente}
+              onChange={(e) => set("cliente", e.target.value)}
+              className="font-display font-extrabold text-3xl text-brand-900 tracking-tight w-full bg-transparent border-b-2 border-brand-300 focus:border-brand-500 focus:outline-none"
+            />
+          ) : (
+            <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">
+              {carga.cliente}
+            </h1>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StatusBadge status={status} large />
             <select
@@ -171,13 +300,42 @@ export function CargaDetail({
             </select>
           </div>
         </div>
-        <button
-          onClick={doSync}
-          disabled={syncing || !carga.termografo_id}
-          className="rounded-xl bg-brand-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 transition shadow-sm"
-        >
-          {syncing ? "Sincronizando…" : "Sincronizar ahora"}
-        </button>
+
+        {/* Action buttons */}
+        <div className="flex flex-col items-end gap-2">
+          <button
+            onClick={doSync}
+            disabled={syncing || !carga.termografo_id}
+            className="rounded-xl bg-brand-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 transition shadow-sm"
+          >
+            {syncing ? "Sincronizando…" : "Sincronizar ahora"}
+          </button>
+          {editing ? (
+            <div className="flex gap-2">
+              <button
+                onClick={cancelEdit}
+                disabled={saving}
+                className="rounded-xl border border-brand-200 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={saving}
+                className="rounded-xl bg-brand-700 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50 transition shadow-sm"
+              >
+                {saving ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={startEdit}
+              className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
+            >
+              Editar
+            </button>
+          )}
+        </div>
       </div>
 
       <AlertaBanner
@@ -191,21 +349,88 @@ export function CargaDetail({
       <div>
         <SectionHeader>Detalles</SectionHeader>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <InfoCell label="Fecha carga" value={carga.fecha_carga} />
-          <InfoCell label="Fecha entrega" value={carga.fecha_entrega} />
-          <InfoCell label="Cita" value={carga.cita ?? "—"} />
-          <InfoCell label="Lugar de carga" value={carga.lugar_carga} />
-          <InfoCell
-            label="Producto (rango)"
-            value={carga.producto ? `${carga.producto.nombre} · ${tempMin}°–${tempMax}°` : "—"}
-          />
-          <InfoCell label="Flete" value={carga.flete_cargo ?? "—"} />
+
+          {editing ? (
+            <EditCell label="N° de carga">
+              <input type="text" value={editData.ov_ref} onChange={(e) => set("ov_ref", e.target.value)} className={bareInput} />
+            </EditCell>
+          ) : (
+            <InfoCell label="N° de carga" value={carga.ov_ref} />
+          )}
+
+          {editing ? (
+            <EditCell label="Fecha carga">
+              <input type="date" value={editData.fecha_carga} onChange={(e) => set("fecha_carga", e.target.value)} className={bareInput} />
+            </EditCell>
+          ) : (
+            <InfoCell label="Fecha carga" value={carga.fecha_carga} />
+          )}
+
+          {editing ? (
+            <EditCell label="Fecha entrega">
+              <input type="date" value={editData.fecha_entrega} onChange={(e) => set("fecha_entrega", e.target.value)} className={bareInput} />
+            </EditCell>
+          ) : (
+            <InfoCell label="Fecha entrega" value={carga.fecha_entrega} />
+          )}
+
+          {editing ? (
+            <EditCell label="Cita">
+              <input type="text" value={editData.cita} onChange={(e) => set("cita", e.target.value)} placeholder="—" className={bareInput} />
+            </EditCell>
+          ) : (
+            <InfoCell label="Cita" value={carga.cita ?? "—"} />
+          )}
+
+          {editing ? (
+            <EditCell label="Lugar de carga">
+              <select value={editData.lugar_carga} onChange={(e) => set("lugar_carga", e.target.value)} className={bareSelect}>
+                {LUGAR_OPTIONS.map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </EditCell>
+          ) : (
+            <InfoCell label="Lugar de carga" value={carga.lugar_carga} />
+          )}
+
+          {editing ? (
+            <EditCell label="Producto">
+              <select value={editData.producto_id} onChange={(e) => set("producto_id", e.target.value)} className={bareSelect}>
+                <option value="">Sin producto</option>
+                {productos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} · {p.temp_min}°–{p.temp_max}°
+                  </option>
+                ))}
+              </select>
+            </EditCell>
+          ) : (
+            <InfoCell
+              label="Producto (rango)"
+              value={carga.producto ? `${carga.producto.nombre} · ${tempMin}°–${tempMax}°` : "—"}
+            />
+          )}
+
+          {editing ? (
+            <EditCell label="Flete">
+              <select value={editData.flete_cargo} onChange={(e) => set("flete_cargo", e.target.value)} className={bareSelect}>
+                <option value="">— Sin transportista —</option>
+                {transportistas.map((t) => (
+                  <option key={t.id} value={t.nombre}>{t.nombre}</option>
+                ))}
+              </select>
+            </EditCell>
+          ) : (
+            <InfoCell label="Flete" value={carga.flete_cargo ?? "—"} />
+          )}
+
           <InfoCell
             label="Última lectura"
             value={carga.ultima_lectura ? new Date(carga.ultima_lectura).toLocaleString("es-MX") : "—"}
           />
 
-          {/* Termógrafo cell */}
+          {/* Termógrafo — siempre con su propio inline edit */}
           <div className="rounded-xl border border-brand-100 bg-white px-4 py-3">
             <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">
               Termógrafo
@@ -252,13 +477,23 @@ export function CargaDetail({
       </div>
 
       {/* Descripción */}
-      <div className="bg-white rounded-xl border border-brand-100 px-5 py-4">
+      <div className={`bg-white rounded-xl px-5 py-4 ${editing ? "border border-brand-300 ring-1 ring-brand-100" : "border border-brand-100"}`}>
         <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">
           Descripción del producto
         </div>
-        <div className="whitespace-pre-wrap text-sm text-brand-900 leading-relaxed">
-          {carga.producto_descripcion}
-        </div>
+        {editing ? (
+          <textarea
+            value={editData.producto_descripcion}
+            onChange={(e) => set("producto_descripcion", e.target.value)}
+            rows={4}
+            className="w-full text-sm text-brand-900 leading-relaxed bg-transparent focus:outline-none resize-none placeholder:text-brand-300"
+            placeholder="Descripción del producto…"
+          />
+        ) : (
+          <div className="whitespace-pre-wrap text-sm text-brand-900 leading-relaxed">
+            {carga.producto_descripcion}
+          </div>
+        )}
       </div>
 
       {/* Mapa + Temperatura */}
