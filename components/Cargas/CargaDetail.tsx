@@ -351,11 +351,11 @@ export function CargaDetail({
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
 
           {editing ? (
-            <EditCell label="N° de carga">
+            <EditCell label="OV / REF">
               <input type="text" value={editData.ov_ref} onChange={(e) => set("ov_ref", e.target.value)} className={bareInput} />
             </EditCell>
           ) : (
-            <InfoCell label="N° de carga" value={carga.ov_ref} />
+            <InfoCell label="OV / REF" value={carga.ov_ref} />
           )}
 
           {editing ? (

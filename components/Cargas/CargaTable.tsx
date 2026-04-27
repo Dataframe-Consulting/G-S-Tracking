@@ -46,6 +46,7 @@ function FilterSelect({
 export function CargaTable({ cargas }: { cargas: Carga[] }) {
   const router = useRouter();
 
+  const [fOvRef, setFOvRef] = useState("");
   const [fCliente, setFCliente] = useState("");
   const [fFecha, setFFecha] = useState("");
   const [fProducto, setFProducto] = useState("");
@@ -61,9 +62,10 @@ export function CargaTable({ cargas }: { cargas: Carga[] }) {
   const lugares = useMemo(() => unique(cargas.map((c) => c.lugar_carga)), [cargas]);
   const fletes = useMemo(() => unique(cargas.map((c) => c.flete_cargo)), [cargas]);
 
-  const anyFilter = fCliente || fFecha || fProducto || fStatus || fLugar || fFlete;
+  const anyFilter = fOvRef || fCliente || fFecha || fProducto || fStatus || fLugar || fFlete;
 
   function clearFilters() {
+    setFOvRef("");
     setFCliente("");
     setFFecha("");
     setFProducto("");
@@ -73,7 +75,9 @@ export function CargaTable({ cargas }: { cargas: Carga[] }) {
   }
 
   const filtered = useMemo(() => {
+    const ovRefLower = fOvRef.toLowerCase();
     return cargas.filter((c) => {
+      if (fOvRef && !c.ov_ref?.toLowerCase().includes(ovRefLower)) return false;
       if (fCliente && c.cliente !== fCliente) return false;
       if (fFecha && c.fecha_carga !== fFecha) return false;
       if (fProducto && c.producto?.nombre !== fProducto) return false;
@@ -82,7 +86,7 @@ export function CargaTable({ cargas }: { cargas: Carga[] }) {
       if (fFlete && c.flete_cargo !== fFlete) return false;
       return true;
     });
-  }, [cargas, fCliente, fFecha, fProducto, fStatus, fLugar, fFlete]);
+  }, [cargas, fOvRef, fCliente, fFecha, fProducto, fStatus, fLugar, fFlete]);
 
   return (
     <div className="space-y-3">
@@ -93,6 +97,17 @@ export function CargaTable({ cargas }: { cargas: Carga[] }) {
           value={fCliente}
           onChange={setFCliente}
           options={clientes.map((v) => ({ value: v, label: v }))}
+        />
+        <input
+          type="text"
+          value={fOvRef}
+          onChange={(e) => setFOvRef(e.target.value)}
+          placeholder="Buscar OV / REF…"
+          className={`rounded-lg border px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 transition w-40 ${
+            fOvRef
+              ? "border-brand-400 text-brand-900 font-medium"
+              : "border-brand-200 text-brand-400"
+          }`}
         />
         <input
           type="date"
