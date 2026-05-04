@@ -4,7 +4,7 @@ import { sendWhatsAppAlert } from "./twilio";
 const COOLDOWN_MINUTES = 30;
 
 export interface CheckAlertaResult {
-  cargaId: string;
+  viajeId: string;
   fueraRango: boolean;
   alertaEnviada: boolean;
   cooldown: boolean;
@@ -13,56 +13,56 @@ export interface CheckAlertaResult {
 
 export async function checkAlertas(
   supabase: SupabaseClient,
-  cargaId: string
+  viajeId: string,
+  tempMin?: number,
+  tempMax?: number
 ): Promise<CheckAlertaResult> {
-  const { data: carga, error } = await supabase
-    .from("cargas")
-    .select(
-      `id, ov_ref, cliente, producto_descripcion, temp_actual, lat, lng,
-       producto:productos ( nombre, temp_min, temp_max )`
-    )
-    .eq("id", cargaId)
+  const { data: viaje, error } = await supabase
+    .from("viajes")
+    .select(`id, temp_actual, lat, lng`)
+    .eq("id", viajeId)
     .single();
 
-  if (error || !carga) {
-    return { cargaId, fueraRango: false, alertaEnviada: false, cooldown: false, motivo: "carga_not_found" };
+  if (error || !viaje) {
+    return { viajeId, fueraRango: false, alertaEnviada: false, cooldown: false, motivo: "viaje_not_found" };
   }
 
-  const producto = Array.isArray(carga.producto) ? carga.producto[0] : carga.producto;
-  if (!producto || carga.temp_actual == null) {
-    return { cargaId, fueraRango: false, alertaEnviada: false, cooldown: false, motivo: "sin_producto_o_temp" };
+  if (tempMin == null || tempMax == null || viaje.temp_actual == null) {
+    return { viajeId, fueraRango: false, alertaEnviada: false, cooldown: false, motivo: "sin_rango_o_temp" };
   }
 
-  const temp = Number(carga.temp_actual);
-  const tempMin = Number(producto.temp_min);
-  const tempMax = Number(producto.temp_max);
-
+  const temp = Number(viaje.temp_actual);
   const fueraRango = temp < tempMin || temp > tempMax;
   const tipo: "TEMP_ALTA" | "TEMP_BAJA" = temp > tempMax ? "TEMP_ALTA" : "TEMP_BAJA";
 
   if (!fueraRango) {
-    await supabase.from("cargas").update({ alerta_activa: false }).eq("id", cargaId);
-    return { cargaId, fueraRango: false, alertaEnviada: false, cooldown: false };
+    await supabase.from("viajes").update({ alerta_activa: false }).eq("id", viajeId);
+    return { viajeId, fueraRango: false, alertaEnviada: false, cooldown: false };
   }
 
-  // Flag active alert
-  await supabase.from("cargas").update({ alerta_activa: true }).eq("id", cargaId);
+  await supabase.from("viajes").update({ alerta_activa: true }).eq("id", viajeId);
 
-  // Check cooldown: avoid spamming if an alert of same type was sent recently
   const since = new Date(Date.now() - COOLDOWN_MINUTES * 60_000).toISOString();
   const { data: recent } = await supabase
     .from("alertas_log")
     .select("id")
-    .eq("carga_id", cargaId)
+    .eq("viaje_id", viajeId)
     .eq("tipo", tipo)
     .gte("created_at", since)
     .limit(1);
 
   if (recent && recent.length > 0) {
-    return { cargaId, fueraRango: true, alertaEnviada: false, cooldown: true };
+    return { viajeId, fueraRango: true, alertaEnviada: false, cooldown: true };
   }
 
-  // Destinatarios from config
+  // Get OV info for the alert message (first OV with a client)
+  const { data: primeraOV } = await supabase
+    .from("ordenes_venta")
+    .select("ov_ref, cliente, producto:productos(nombre)")
+    .eq("viaje_id", viajeId)
+    .limit(1)
+    .single();
+
   const { data: cfg } = await supabase
     .from("config")
     .select("value")
@@ -72,20 +72,24 @@ export async function checkAlertas(
   const destinatarios = Array.isArray(cfg?.value) ? (cfg!.value as string[]) : [];
 
   const ubicacion =
-    carga.lat != null && carga.lng != null
-      ? `https://maps.google.com/?q=${carga.lat},${carga.lng}`
+    viaje.lat != null && viaje.lng != null
+      ? `https://maps.google.com/?q=${viaje.lat},${viaje.lng}`
       : undefined;
+
+  const productoObj = primeraOV
+    ? (Array.isArray(primeraOV.producto) ? primeraOV.producto[0] : primeraOV.producto)
+    : null;
 
   const sendResults = await sendWhatsAppAlert(
     {
-      cargaRef: carga.ov_ref,
-      cliente: carga.cliente,
-      producto: producto.nombre,
+      cargaRef: primeraOV?.ov_ref ?? viajeId,
+      cliente: primeraOV?.cliente ?? "—",
+      producto: productoObj?.nombre ?? "—",
       tempActual: temp,
       tempMin,
       tempMax,
       tipo,
-      ubicacion
+      ubicacion,
     },
     destinatarios
   );
@@ -96,12 +100,12 @@ export async function checkAlertas(
       : `Temperatura BAJA: ${temp}°C (mín ${tempMin}°C)`;
 
   const rows = sendResults.map((r) => ({
-    carga_id: cargaId,
+    viaje_id: viajeId,
     tipo,
     temperatura: temp,
     mensaje: r.error ? `${mensaje} — ERROR: ${r.error}` : mensaje,
     whatsapp_sid: r.sid ?? null,
-    enviado_a: r.to
+    enviado_a: r.to,
   }));
 
   if (rows.length > 0) {
@@ -109,5 +113,5 @@ export async function checkAlertas(
   }
 
   const anySent = sendResults.some((r) => r.sid);
-  return { cargaId, fueraRango: true, alertaEnviada: anySent, cooldown: false };
+  return { viajeId, fueraRango: true, alertaEnviada: anySent, cooldown: false };
 }

@@ -7,7 +7,7 @@ export default async function AlertasPage() {
   const supabase = createServerSupabase();
   const { data } = await supabase
     .from("alertas_log")
-    .select(`*, carga:cargas ( id, ov_ref, cliente )`)
+    .select(`*, viaje:viajes ( id, numero, lugar_inicio, lugar_fin )`)
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -20,7 +20,7 @@ export default async function AlertasPage() {
       enviado_a: string | null;
       whatsapp_sid: string | null;
       created_at: string;
-      carga: { id: string; ov_ref: string; cliente: string } | null;
+      viaje: { id: string; numero: number; lugar_inicio: string; lugar_fin: string } | null;
     }>) ?? [];
 
   return (
@@ -38,7 +38,7 @@ export default async function AlertasPage() {
                 <th className="text-left px-4 py-3 font-medium">Fecha</th>
                 <th className="text-left px-4 py-3 font-medium">Tipo</th>
                 <th className="text-left px-4 py-3 font-medium">Temp</th>
-                <th className="text-left px-4 py-3 font-medium">Carga</th>
+                <th className="text-left px-4 py-3 font-medium">Viaje</th>
                 <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Destinatario</th>
                 <th className="text-left px-4 py-3 font-medium">Envío</th>
               </tr>
@@ -67,13 +67,17 @@ export default async function AlertasPage() {
                       {a.temperatura != null ? `${Number(a.temperatura).toFixed(1)}°C` : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      {a.carga ? (
+                      {a.viaje ? (
                         <Link
-                          href={`/cargas/${a.carga.id}`}
+                          href={`/viajes/${a.viaje.id}`}
                           className="text-brand-700 hover:text-accent transition-colors font-medium"
                         >
-                          <div className="font-mono text-xs">{a.carga.ov_ref}</div>
-                          <div className="text-sm">{a.carga.cliente}</div>
+                          <div className="font-mono text-xs">
+                            #{String(a.viaje.numero).padStart(4, "0")}
+                          </div>
+                          <div className="text-sm">
+                            {a.viaje.lugar_inicio} → {a.viaje.lugar_fin}
+                          </div>
                         </Link>
                       ) : (
                         <span className="text-brand-300">—</span>

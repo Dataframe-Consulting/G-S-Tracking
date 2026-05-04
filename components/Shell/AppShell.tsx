@@ -14,7 +14,7 @@ const icons: Record<string, React.ReactNode> = {
       <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
     </svg>
   ),
-  Cargas: (
+  Viajes: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 shrink-0">
       <rect x="1" y="3" width="15" height="13" rx="1.5"/>
       <path d="M16 8h4l3 4v4h-7V8z"/>
@@ -37,7 +37,7 @@ const icons: Record<string, React.ReactNode> = {
 
 const NAV = [
   { href: "/dashboard",     label: "Dashboard" },
-  { href: "/cargas",        label: "Cargas" },
+  { href: "/viajes",        label: "Viajes" },
   { href: "/alertas",       label: "Alertas" },
   { href: "/configuracion", label: "Configuración" }
 ];

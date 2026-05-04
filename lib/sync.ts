@@ -2,46 +2,56 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getDeviceReadings } from "./copeland";
 import { checkAlertas } from "./alertas";
 
-export async function runSync(supabase: SupabaseClient, cargaId?: string | null) {
+export async function runSync(supabase: SupabaseClient, viajeId?: string | null) {
   let q = supabase
-    .from("cargas")
-    .select(`id, termografo_id, status, producto:productos ( temp_min, temp_max )`)
+    .from("viajes")
+    .select(`id, termografo_id, ordenes_venta ( producto:productos ( temp_min, temp_max ) )`)
     .not("termografo_id", "is", null);
 
-  if (cargaId) {
-    q = q.eq("id", cargaId);
-  } else {
-    q = q.eq("status", "TRANSITO");
+  if (viajeId) {
+    q = q.eq("id", viajeId);
   }
 
-  const { data: cargas, error } = await q;
+  const { data: viajes, error } = await q;
   if (error) return { error: error.message, updated: 0 };
-  if (!cargas || cargas.length === 0) return { updated: 0 };
+  if (!viajes || viajes.length === 0) return { updated: 0 };
 
   let updated = 0;
   const alertResults: unknown[] = [];
 
-  for (const carga of cargas) {
-    const producto = Array.isArray(carga.producto) ? carga.producto[0] : carga.producto;
-    const readings = await getDeviceReadings(carga.termografo_id!, {
-      productTempMin: producto?.temp_min,
-      productTempMax: producto?.temp_max
+  for (const viaje of viajes) {
+    // Use the most restrictive temp range across all OVs in this viaje
+    const allOrdenes = Array.isArray(viaje.ordenes_venta) ? viaje.ordenes_venta : [];
+    const productos = allOrdenes
+      .map((o: { producto: { temp_min: number; temp_max: number } | null }) =>
+        Array.isArray(o.producto) ? o.producto[0] : o.producto
+      )
+      .filter(Boolean);
+
+    const productTempMin =
+      productos.length > 0 ? Math.max(...productos.map((p: { temp_min: number }) => Number(p.temp_min))) : undefined;
+    const productTempMax =
+      productos.length > 0 ? Math.min(...productos.map((p: { temp_max: number }) => Number(p.temp_max))) : undefined;
+
+    const readings = await getDeviceReadings(viaje.termografo_id!, {
+      productTempMin,
+      productTempMax,
     });
     if (readings.length === 0) continue;
 
     const rows = readings.map((r) => {
       const out =
-        producto &&
-        (Number(r.temperature) < Number(producto.temp_min) ||
-          Number(r.temperature) > Number(producto.temp_max));
+        productTempMin != null &&
+        productTempMax != null &&
+        (Number(r.temperature) < productTempMin || Number(r.temperature) > productTempMax);
       return {
-        carga_id: carga.id,
+        viaje_id: viaje.id,
         termografo_id: r.device_id,
         temperatura: r.temperature,
         lat: r.latitude,
         lng: r.longitude,
         timestamp: r.timestamp,
-        fuera_rango: !!out
+        fuera_rango: !!out,
       };
     });
 
@@ -49,22 +59,22 @@ export async function runSync(supabase: SupabaseClient, cargaId?: string | null)
 
     const latest = readings[readings.length - 1];
     await supabase
-      .from("cargas")
+      .from("viajes")
       .update({
         temp_actual: latest.temperature,
         lat: latest.latitude,
         lng: latest.longitude,
         ultima_lectura: latest.timestamp,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", carga.id);
+      .eq("id", viaje.id);
 
     await supabase
       .from("termografos")
       .update({ ultima_actividad: latest.timestamp })
-      .eq("id", carga.termografo_id!);
+      .eq("id", viaje.termografo_id!);
 
-    const res = await checkAlertas(supabase, carga.id);
+    const res = await checkAlertas(supabase, viaje.id, productTempMin, productTempMax);
     alertResults.push(res);
     updated++;
   }

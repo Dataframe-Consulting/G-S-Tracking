@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   const { searchParams } = new URL(req.url);
-  const cargaId = searchParams.get("cargaId");
+  const viajeId = searchParams.get("viajeId");
   const supabase = createServerSupabase();
-  const result = await runSync(supabase, cargaId);
+  const result = await runSync(supabase, viajeId);
   return NextResponse.json(result);
 }

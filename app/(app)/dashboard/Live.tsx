@@ -4,11 +4,6 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
-/**
- * Subscribes to cargas changes via Supabase Realtime AND triggers a
- * Copeland sync every 3 minutes. Either signal refreshes the server
- * component tree to reflect new data.
- */
 export function DashboardLive() {
   const router = useRouter();
 
@@ -16,10 +11,10 @@ export function DashboardLive() {
     const supabase = createBrowserSupabase();
 
     const channel = supabase
-      .channel("cargas-dashboard")
+      .channel("viajes-dashboard")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "cargas" },
+        { event: "*", schema: "public", table: "viajes" },
         () => router.refresh()
       )
       .subscribe();
@@ -28,7 +23,7 @@ export function DashboardLive() {
       try {
         await fetch("/api/copeland/sync", { method: "POST" });
       } catch {
-        // silent — next tick will retry
+        // silent
       }
       router.refresh();
     }, 3 * 60_000);

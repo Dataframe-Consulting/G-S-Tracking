@@ -2,40 +2,36 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { STATUS_VALUES } from "@/lib/types";
 
-export async function GET(req: Request) {
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
-  const { searchParams } = new URL(req.url);
-  const fecha = searchParams.get("fecha"); // YYYY-MM-DD
-  const status = searchParams.get("status");
-
-  let q = supabase
-    .from("cargas")
-    .select(`*, producto:productos ( id, nombre, temp_min, temp_max )`)
-    .order("fecha_carga", { ascending: false })
-    .order("created_at", { ascending: false });
-
-  if (fecha) q = q.eq("fecha_carga", fecha);
-  if (status) q = q.eq("status", status);
-
-  const { data, error } = await q;
+  const { data, error } = await supabase
+    .from("ordenes_venta")
+    .select(`*, producto:productos(id, nombre, temp_min, temp_max)`)
+    .eq("viaje_id", params.id)
+    .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
   const body = await req.json();
 
   const required = [
-    "fecha_carga",
-    "fecha_entrega",
-    "cliente",
     "ov_ref",
+    "cliente",
+    "fecha_carga",
     "lugar_carga",
-    "producto_descripcion"
+    "fecha_entrega",
+    "lugar_entrega",
+    "instrucciones",
   ];
   for (const k of required) {
     if (!body[k]) return NextResponse.json({ error: `Falta ${k}` }, { status: 400 });
+  }
+
+  if (!body.producto_id && !body.producto_combinacion_id) {
+    return NextResponse.json({ error: "Falta producto" }, { status: 400 });
   }
 
   if (body.status && !STATUS_VALUES.includes(body.status)) {
@@ -43,34 +39,28 @@ export async function POST(req: Request) {
   }
 
   const payload = {
-    fecha_carga: body.fecha_carga,
-    fecha_entrega: body.fecha_entrega,
-    cita: body.cita ?? null,
-    cliente: body.cliente,
+    viaje_id: params.id,
     ov_ref: body.ov_ref,
+    cliente: body.cliente,
+    fecha_carga: body.fecha_carga,
     lugar_carga: body.lugar_carga,
-    producto_descripcion: body.producto_descripcion,
+    fecha_entrega: body.fecha_entrega,
+    lugar_entrega: body.lugar_entrega,
+    cita: body.cita ?? null,
+    status: body.status ?? "PENDIENTE",
+    instrucciones: body.instrucciones,
     producto_id: body.producto_id ?? null,
     producto_combinacion_id: body.producto_combinacion_id ?? null,
-    status: body.status ?? "PENDIENTE",
-    flete_cargo: body.flete_cargo ?? null,
-    termografo_id: body.termografo_id ?? null
+    cajas: body.cajas != null ? Number(body.cajas) : null,
+    cajas_b: body.cajas_b != null ? Number(body.cajas_b) : null,
   };
 
   const { data, error } = await supabase
-    .from("cargas")
+    .from("ordenes_venta")
     .insert(payload)
-    .select("*")
+    .select(`*, producto:productos(id, nombre, temp_min, temp_max)`)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-  if (data.termografo_id) {
-    await supabase
-      .from("termografos")
-      .update({ asignado: true, carga_id: data.id })
-      .eq("id", data.termografo_id);
-  }
-
   return NextResponse.json({ data }, { status: 201 });
 }

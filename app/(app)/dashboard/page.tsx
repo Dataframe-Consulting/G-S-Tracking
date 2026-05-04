@@ -1,5 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
-import type { Carga, Producto } from "@/lib/types";
+import type { OrdenVenta, Producto } from "@/lib/types";
 import { KpiCards } from "@/components/Dashboard/KpiCards";
 import { DashboardFilters } from "./Filters";
 import { DashboardLive } from "./Live";
@@ -38,10 +38,10 @@ export default async function DashboardPage({
   const fechaHasta = searchParams.fecha_hasta ?? today();
   const productoId = searchParams.producto_id ?? "";
 
-  // Cargas en el rango
+  // Ordenes en el rango + viaje info para flete
   let q = supabase
-    .from("cargas")
-    .select(`*, producto:productos(id, nombre, temp_min, temp_max)`)
+    .from("ordenes_venta")
+    .select(`*, producto:productos(id, nombre, temp_min, temp_max), viaje:viajes(id, flete_cargo, alerta_activa)`)
     .gte("fecha_carga", fechaDesde)
     .lte("fecha_carga", fechaHasta)
     .order("fecha_carga", { ascending: true });
@@ -53,18 +53,18 @@ export default async function DashboardPage({
     supabase.from("productos").select("*").order("nombre"),
   ]);
 
-  const cargas = (data ?? []) as Carga[];
+  const ordenes = (data ?? []) as (OrdenVenta & { viaje: { id: string; flete_cargo: string | null; alerta_activa: boolean } | null })[];
   const productos = (productosData ?? []) as Producto[];
 
   // KPIs
-  const total = cargas.length;
-  const enTransito = cargas.filter((c) => c.status === "TRANSITO").length;
-  const alertas = cargas.filter((c) => c.alerta_activa).length;
-  const entregadas = cargas.filter(
-    (c) => c.status === "ENTREGADO" || c.status === "RECIBIDO"
+  const total = ordenes.length;
+  const enTransito = ordenes.filter((o) => o.status === "TRANSITO").length;
+  const alertas = ordenes.filter((o) => o.viaje?.alerta_activa).length;
+  const entregadas = ordenes.filter(
+    (o) => o.status === "ENTREGADO" || o.status === "RECIBIDO"
   ).length;
 
-  // Chart 1: cargas por fecha — fill every day in the range with zeros
+  // Chart 1: ordenes por fecha
   const fechaMap = new Map<string, ChartCargaRow>();
   const cursor = new Date(fechaDesde + "T12:00:00Z");
   const end = new Date(fechaHasta + "T12:00:00Z");
@@ -73,24 +73,24 @@ export default async function DashboardPage({
     fechaMap.set(f, { fecha: f, total: 0, transito: 0, entregadas: 0, alertas: 0 });
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-  for (const c of cargas) {
-    const f = c.fecha_carga;
+  for (const o of ordenes) {
+    const f = o.fecha_carga;
     if (!fechaMap.has(f))
       fechaMap.set(f, { fecha: f, total: 0, transito: 0, entregadas: 0, alertas: 0 });
     const row = fechaMap.get(f)!;
     row.total++;
-    if (c.status === "TRANSITO") row.transito++;
-    if (c.status === "ENTREGADO" || c.status === "RECIBIDO") row.entregadas++;
-    if (c.alerta_activa) row.alertas++;
+    if (o.status === "TRANSITO") row.transito++;
+    if (o.status === "ENTREGADO" || o.status === "RECIBIDO") row.entregadas++;
+    if (o.viaje?.alerta_activa) row.alertas++;
   }
   const byFecha: ChartCargaRow[] = Array.from(fechaMap.values()).sort(
     (a, b) => a.fecha.localeCompare(b.fecha)
   );
 
-  // Chart 2: por transportista (top 8)
+  // Chart 2: por transportista (top 8) — from viaje.flete_cargo
   const transportistaMap = new Map<string, number>();
-  for (const c of cargas) {
-    const t = c.flete_cargo?.trim() || "Sin asignar";
+  for (const o of ordenes) {
+    const t = o.viaje?.flete_cargo?.trim() || "Sin asignar";
     transportistaMap.set(t, (transportistaMap.get(t) ?? 0) + 1);
   }
   const byTransportista: ChartTransportistaRow[] = Array.from(transportistaMap.entries())
@@ -100,8 +100,8 @@ export default async function DashboardPage({
 
   // Chart 3: por cliente (top 8)
   const clienteMap = new Map<string, number>();
-  for (const c of cargas) {
-    clienteMap.set(c.cliente, (clienteMap.get(c.cliente) ?? 0) + 1);
+  for (const o of ordenes) {
+    clienteMap.set(o.cliente, (clienteMap.get(o.cliente) ?? 0) + 1);
   }
   const byCliente: ChartClienteRow[] = Array.from(clienteMap.entries())
     .map(([cliente, count]) => ({ cliente, count }))

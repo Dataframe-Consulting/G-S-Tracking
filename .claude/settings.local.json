@@ -4,7 +4,11 @@
       "Bash(npm install *)",
       "Bash(npm view *)",
       "Bash(node \"./node_modules/typescript/bin/tsc\" --noEmit)",
-      "Bash(node \"./node_modules/next/dist/bin/next\" build)"
+      "Bash(node \"./node_modules/next/dist/bin/next\" build)",
+      "Bash(npx tsc *)",
+      "Bash(node_modules/.bin/next build *)",
+      "Bash(git push *)",
+      "Bash(node_modules/.bin/tsc --noEmit)"
     ]
   }
 }

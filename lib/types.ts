@@ -50,20 +50,44 @@ export interface ProductoCombinacion {
   producto_b: { id: string; nombre: string };
 }
 
-export interface Carga {
+export interface OrdenVenta {
   id: string;
-  fecha_carga: string;
-  fecha_entrega: string;
-  cita: string | null;
-  cliente: string;
+  viaje_id: string;
   ov_ref: string;
+  cliente: string;
+  fecha_carga: string;
   lugar_carga: string;
-  producto_descripcion: string;
+  fecha_entrega: string;
+  lugar_entrega: string;
+  cita: string | null;
+  status: Status;
+  instrucciones: string;
   producto_id: string | null;
   producto_combinacion_id: string | null;
-  status: Status;
+  cajas: number | null;
+  cajas_b: number | null;
+  created_at: string;
+  updated_at: string;
+  producto?: Producto | null;
+  combo?: ProductoCombinacion | null;
+}
+
+export interface Responsable {
+  id: string;
+  nombre: string | null;
+  email: string | null;
+}
+
+export interface Viaje {
+  id: string;
+  numero: number;
+  lugar_inicio: string;
+  lugar_fin: string;
+  fecha_inicio: string;
+  fecha_fin: string;
   flete_cargo: string | null;
   termografo_id: string | null;
+  responsable_id: string | null;
   temp_actual: number | null;
   lat: number | null;
   lng: number | null;
@@ -71,12 +95,13 @@ export interface Carga {
   alerta_activa: boolean;
   created_at: string;
   updated_at: string;
-  producto?: Producto | null;
+  ordenes_venta?: OrdenVenta[];
+  responsable?: Responsable | null;
 }
 
 export interface LecturaTemperatura {
   id: string;
-  carga_id: string;
+  viaje_id: string;
   termografo_id: string;
   temperatura: number;
   lat: number | null;
@@ -87,7 +112,7 @@ export interface LecturaTemperatura {
 
 export interface AlertaLog {
   id: string;
-  carga_id: string;
+  viaje_id: string;
   tipo: "TEMP_ALTA" | "TEMP_BAJA";
   temperatura: number | null;
   mensaje: string | null;
@@ -100,7 +125,7 @@ export interface Termografo {
   id: string;
   nombre: string | null;
   asignado: boolean;
-  carga_id: string | null;
+  viaje_id: string | null;
   ultima_actividad: string | null;
 }
 
@@ -124,12 +149,6 @@ export interface Cliente {
   id: string;
   nombre: string;
   contacto: string | null;
-  created_at: string;
-}
-
-export interface LugarCarga {
-  id: string;
-  nombre: string;
   created_at: string;
 }
 

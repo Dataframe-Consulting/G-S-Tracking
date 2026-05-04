@@ -22,7 +22,7 @@ export default async function TermografosPage() {
               <th className="text-left px-3 py-2">ID</th>
               <th className="text-left px-3 py-2">Nombre</th>
               <th className="text-left px-3 py-2">Estado</th>
-              <th className="text-left px-3 py-2">Carga asignada</th>
+              <th className="text-left px-3 py-2">Viaje asignado</th>
               <th className="text-left px-3 py-2">Última actividad</th>
             </tr>
           </thead>
@@ -43,9 +43,9 @@ export default async function TermografosPage() {
                   )}
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">
-                  {t.carga_id ? (
-                    <Link href={`/cargas/${t.carga_id}`} className="text-brand-700 hover:underline">
-                      {t.carga_id.slice(0, 8)}…
+                  {t.viaje_id ? (
+                    <Link href={`/viajes/${t.viaje_id}`} className="text-brand-700 hover:underline">
+                      {t.viaje_id.slice(0, 8)}…
                     </Link>
                   ) : (
                     "—"
