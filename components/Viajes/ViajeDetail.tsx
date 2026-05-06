@@ -905,12 +905,12 @@ function TermografoModalContent({
         Conectar termógrafo
       </div>
       <p className="text-sm text-brand-500 mb-4">
-        Ingresa el ID del dispositivo Copeland a asignar a este viaje.
+        Ingresa el número de serie del dispositivo Copeland (impreso en el termógrafo físico).
       </p>
       <input
         autoFocus
         type="text"
-        placeholder="CPL-001"
+        placeholder="Ej: 1901088888"
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && connect()}
