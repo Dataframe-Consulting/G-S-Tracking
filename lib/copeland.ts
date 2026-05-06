@@ -15,6 +15,8 @@
  *   - simulateDeviceReadings genera datos por dispositivo
  */
 
+import https from "node:https";
+
 const BASE_URL = "https://api.oversight.copeland.com/edi";
 
 export interface CopelandReading {
@@ -27,7 +29,7 @@ export interface CopelandReading {
   guid?: string;
 }
 
-function copelandHeaders(): HeadersInit {
+function copelandHeaders(extra?: Record<string, string>): Record<string, string> {
   const apiKey = process.env.COPELAND_API_KEY;
   const subKey = process.env.COPELAND_SUBSCRIPTION_KEY;
   if (!apiKey || !subKey) {
@@ -37,7 +39,39 @@ function copelandHeaders(): HeadersInit {
     "Content-Type": "application/json",
     "X-LT-ApiKey": apiKey,
     "Ocp-Apim-Subscription-Key": subKey,
+    ...(extra ?? {}),
   };
+}
+
+// Copeland's API rejects requests from Node's built-in fetch (undici) with HTTP 500.
+// We use the lower-level `https` module — same headers/body, but it doesn't trip the bug.
+function copelandPost(
+  endpoint: string,
+  body: Record<string, unknown>
+): Promise<{ status: number; body: string }> {
+  const payload = JSON.stringify(body);
+  const url = new URL(`${BASE_URL}/${endpoint}`);
+  const options: https.RequestOptions = {
+    hostname: url.hostname,
+    path: url.pathname + url.search,
+    method: "POST",
+    headers: copelandHeaders({
+      "Content-Length": String(Buffer.byteLength(payload)),
+      "Accept": "*/*",
+      "User-Agent": "agrotrack/1.0",
+    }),
+  };
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let chunks = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => (chunks += c));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body: chunks }));
+    });
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -92,13 +126,11 @@ export async function defineTrip(
   };
 
   try {
-    const res = await fetch(`${BASE_URL}/DefineTrip`, {
-      method: "POST",
-      headers: copelandHeaders(),
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
-    const data = await res.json();
+    const res = await copelandPost("DefineTrip", body);
+    if (res.status !== 200) {
+      return { success: false, error: `HTTP ${res.status}: ${res.body}` };
+    }
+    const data = JSON.parse(res.body);
     if (data.ErrorCode !== 0) {
       return { success: false, error: data.ErrorDescription ?? `ErrorCode ${data.ErrorCode}` };
     }
@@ -111,12 +143,7 @@ export async function defineTrip(
 export async function closeTrip(tripId: string, trackerId: string): Promise<void> {
   if (process.env.COPELAND_SIMULATE !== "false") return;
   try {
-    await fetch(`${BASE_URL}/CloseTrip`, {
-      method: "POST",
-      headers: copelandHeaders(),
-      body: JSON.stringify({ TripID: tripId, TrackerID: trackerId }),
-      cache: "no-store",
-    });
+    await copelandPost("CloseTrip", { TripID: tripId, TrackerID: trackerId });
   } catch {
     // best-effort: no bloqueamos la operación del usuario si esto falla
   }
@@ -130,34 +157,35 @@ export interface SensorReadingsResult {
   readings: CopelandReading[];
   maxGuid: string | null;
   hasMore: boolean;
+  raw: unknown; // respuesta cruda de Copeland (útil para diagnóstico)
 }
 
 export async function getSensorReadings(
   lastGuid?: string | null
 ): Promise<SensorReadingsResult> {
   if (process.env.COPELAND_SIMULATE !== "false") {
-    return { readings: [], maxGuid: null, hasMore: false };
+    return { readings: [], maxGuid: null, hasMore: false, raw: { simulated: true } };
   }
 
   const body: Record<string, unknown> = { PageSize: 500 };
   if (lastGuid) body.LastGUID = lastGuid;
 
-  const res = await fetch(`${BASE_URL}/GetSensorReadings`, {
-    method: "POST",
-    headers: copelandHeaders(),
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
+  const res = await copelandPost("GetSensorReadings", body);
 
-  if (!res.ok) {
-    throw new Error(`GetSensorReadings HTTP ${res.status}: ${await res.text()}`);
+  if (res.status !== 200) {
+    throw new Error(`GetSensorReadings HTTP ${res.status}: ${res.body}`);
   }
 
-  const data = await res.json();
+  const data = JSON.parse(res.body);
 
-  // Rate limit: no bloqueamos — devolvemos vacío
-  if (data.ErrorCode === 601283 || data.ErrorCode === 1011) {
-    return { readings: [], maxGuid: lastGuid ?? null, hasMore: false };
+  // Estados no-fatales: rate-limit (601283/1011) y "no records found" (1009).
+  // En todos devolvemos lecturas vacías sin avanzar el cursor.
+  if (
+    data.ErrorCode === 601283 ||
+    data.ErrorCode === 1011 ||
+    data.ErrorCode === 1009
+  ) {
+    return { readings: [], maxGuid: lastGuid ?? null, hasMore: false, raw: data };
   }
 
   if (data.ErrorCode !== 0 && data.ErrorCode !== null) {
@@ -189,6 +217,7 @@ export async function getSensorReadings(
     readings,
     maxGuid: data.MaxGUIDReturned ?? null,
     hasMore: data.HasMoreResults === true,
+    raw: data,
   };
 }
 

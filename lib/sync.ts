@@ -72,7 +72,7 @@ async function persistReadings(
 export async function runSync(supabase: SupabaseClient, viajeId?: string | null) {
   let q = supabase
     .from("viajes")
-    .select(`id, termografo_id, ordenes_venta ( produto:produtos ( temp_min, temp_max ) )`)
+    .select(`id, termografo_id, ordenes_venta ( produto:productos ( temp_min, temp_max ) )`)
     .not("termografo_id", "is", null);
 
   if (viajeId) q = q.eq("id", viajeId);
@@ -107,7 +107,7 @@ async function runSimSync(supabase: SupabaseClient, viajes: ViajeRow[]) {
     updated++;
   }
 
-  return { updated, alertas: alertResults };
+  return { updated, alertas: alertResults, copeland: { mode: "sim" } };
 }
 
 // ---------------------------------------------------------------------------
@@ -135,11 +135,13 @@ async function runRealSync(
 
   // Agrupar lecturas por viaje drenando todas las páginas
   const byViaje = new Map<string, CopelandReading[]>();
+  const rawPages: unknown[] = [];
   let newCursor = cursor;
   let hasMore = true;
 
   while (hasMore) {
     const result = await getSensorReadings(newCursor);
+    rawPages.push(result.raw);
 
     for (const r of result.readings) {
       const viaje = trackerMap.get(r.device_id);
@@ -179,5 +181,15 @@ async function runRealSync(
     );
   }
 
-  return { updated, alertas: alertResults };
+  return {
+    updated,
+    alertas: alertResults,
+    copeland: {
+      mode: "real",
+      pages: rawPages.length,
+      cursor_before: cursor,
+      cursor_after: newCursor,
+      responses: rawPages,
+    },
+  };
 }

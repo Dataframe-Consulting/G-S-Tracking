@@ -1,27 +1,53 @@
 import { NextResponse } from "next/server";
+import https from "node:https";
 
 export const dynamic = "force-dynamic";
 
 const BASE_URL = "https://api.oversight.copeland.com/edi";
 
-async function tryRequest(endpoint: string, body: Record<string, unknown>, method = "POST") {
+function postViaHttps(
+  endpoint: string,
+  payload: string,
+  apiKey: string,
+  subKey: string
+): Promise<{ status: number; body: string }> {
+  const url = new URL(`${BASE_URL}/${endpoint}`);
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-LT-ApiKey": apiKey,
+          "Ocp-Apim-Subscription-Key": subKey,
+          "Content-Length": String(Buffer.byteLength(payload)),
+          "Accept": "*/*",
+          "User-Agent": "agrotrack/1.0",
+        },
+      },
+      (res) => {
+        let chunks = "";
+        res.setEncoding("utf8");
+        res.on("data", (c) => (chunks += c));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: chunks }));
+      }
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function tryRequest(endpoint: string, body: Record<string, unknown>) {
   const apiKey = process.env.COPELAND_API_KEY!;
   const subKey = process.env.COPELAND_SUBSCRIPTION_KEY!;
 
   try {
-    const res = await fetch(`${BASE_URL}/${endpoint}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        "X-LT-ApiKey": apiKey,
-        "Ocp-Apim-Subscription-Key": subKey,
-      },
-      body: method === "GET" ? undefined : JSON.stringify(body),
-      cache: "no-store",
-    });
-    const text = await res.text();
+    const res = await postViaHttps(endpoint, JSON.stringify(body), apiKey, subKey);
     let json: unknown = null;
-    try { json = JSON.parse(text); } catch { json = text; }
+    try { json = JSON.parse(res.body); } catch { json = res.body; }
     return { status: res.status, body: json };
   } catch (e) {
     return { status: 0, body: String(e) };
@@ -34,19 +60,9 @@ async function tryRequestSwapped(endpoint: string, body: Record<string, unknown>
   const subKey = process.env.COPELAND_API_KEY!;
 
   try {
-    const res = await fetch(`${BASE_URL}/${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-LT-ApiKey": apiKey,
-        "Ocp-Apim-Subscription-Key": subKey,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
-    const text = await res.text();
+    const res = await postViaHttps(endpoint, JSON.stringify(body), apiKey, subKey);
     let json: unknown = null;
-    try { json = JSON.parse(text); } catch { json = text; }
+    try { json = JSON.parse(res.body); } catch { json = res.body; }
     return { status: res.status, body: json };
   } catch (e) {
     return { status: 0, body: String(e) };
@@ -54,15 +70,9 @@ async function tryRequestSwapped(endpoint: string, body: Record<string, unknown>
 }
 
 export async function GET() {
-  const [
-    test1,  // POST body vacío
-    test2,  // POST PageSize: 2 (igual al ejemplo del doc)
-    test3,  // GET sin body
-    test4,  // Keys intercambiadas
-  ] = await Promise.all([
+  const [test1, test2, test3] = await Promise.all([
     tryRequest("GetSensorReadings", {}),
     tryRequest("GetSensorReadings", { PageSize: 2 }),
-    tryRequest("GetSensorReadings", {}, "GET"),
     tryRequestSwapped("GetSensorReadings", { PageSize: 2 }),
   ]);
 
@@ -73,7 +83,6 @@ export async function GET() {
     },
     "test1_POST_body_vacio": test1,
     "test2_POST_pagesize_2": test2,
-    "test3_GET_sin_body": test3,
-    "test4_POST_keys_intercambiadas": test4,
+    "test3_POST_keys_intercambiadas": test3,
   });
 }
