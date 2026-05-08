@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type {
@@ -24,12 +24,40 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 const MapaTracker = dynamic(() => import("@/components/Mapa/MapaTracker"), { ssr: false });
 
+const _geoCache = new Map<string, string>();
+
+function GeoCell({ lat, lng }: { lat: number; lng: number }) {
+  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const [label, setLabel] = useState<string | null>(_geoCache.get(key) ?? null);
+  const fetched = useRef(_geoCache.has(key));
+
+  useEffect(() => {
+    if (fetched.current) return;
+    fetched.current = true;
+    fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`,
+      { headers: { "Accept-Language": "es-MX,es" } }
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        const parts = (data.display_name ?? "")
+          .split(", ")
+          .filter((p: string) => !/^\d{4,5}$/.test(p) && p !== "México" && p !== "Mexico");
+        const result = parts.slice(0, 4).join(", ") || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+        _geoCache.set(key, result);
+        setLabel(result);
+      })
+      .catch(() => setLabel(`${lat.toFixed(3)}, ${lng.toFixed(3)}`));
+  }, [key, lat, lng]);
+
+  if (!label) return <span className="text-brand-300 text-xs">…</span>;
+  return <span>{label}</span>;
+}
+
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 mb-3">
-      <span className="font-display font-semibold text-brand-900 text-sm uppercase tracking-widest">
-        {children}
-      </span>
+    <div className="flex items-center gap-3 mb-4">
+      <h2 className="text-sm font-semibold text-brand-600 shrink-0">{children}</h2>
       <div className="flex-1 h-px bg-brand-100" />
     </div>
   );
@@ -996,11 +1024,18 @@ export function ViajeDetail({
     .reverse()
     .map((l) => ({ lat: Number(l.lat), lng: Number(l.lng) }));
 
-  const tempRanges = ordenes.map((o) => o.producto).filter(Boolean) as Producto[];
-  const tempMin =
-    tempRanges.length > 0 ? Math.max(...tempRanges.map((p) => Number(p.temp_min))) : null;
-  const tempMax =
-    tempRanges.length > 0 ? Math.min(...tempRanges.map((p) => Number(p.temp_max))) : null;
+  const tempRanges = useMemo(
+    () => ordenes.map((o) => o.producto).filter(Boolean) as Producto[],
+    [ordenes]
+  );
+  const tempMin = useMemo(
+    () => (tempRanges.length > 0 ? Math.max(...tempRanges.map((p) => Number(p.temp_min))) : null),
+    [tempRanges]
+  );
+  const tempMax = useMemo(
+    () => (tempRanges.length > 0 ? Math.min(...tempRanges.map((p) => Number(p.temp_max))) : null),
+    [tempRanges]
+  );
 
   async function loadFormData() {
     const fetches = [];
@@ -1241,9 +1276,9 @@ export function ViajeDetail({
           <div className="font-mono text-xs text-brand-400 mb-1">
             Viaje #{String(viaje.numero).padStart(4, "0")}
           </div>
-          <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">
+          <h1 className="font-display font-bold text-2xl text-brand-900 tracking-tight">
             {viaje.lugar_inicio}
-            <span className="text-brand-400 mx-3">→</span>
+            <span className="text-brand-300 mx-2.5">→</span>
             {viaje.lugar_fin}
           </h1>
           <div className="mt-1 text-sm text-brand-500">
@@ -1453,7 +1488,7 @@ export function ViajeDetail({
       <div>
         <SectionHeader>Monitoreo</SectionHeader>
         <div className="grid lg:grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-brand-100 bg-white overflow-hidden h-96 shadow-sm">
+          <div className="rounded-xl border border-brand-100 bg-white overflow-hidden h-96 shadow-[0_1px_16px_-6px_rgba(0,0,0,0.08)]">
             <MapaTracker
               position={position}
               path={path}
@@ -1472,9 +1507,12 @@ export function ViajeDetail({
                 <TempChart lecturas={lecturas} min={tempMin} max={tempMax} />
               </>
             ) : (
-              <div className="rounded-2xl border border-dashed border-brand-200 p-8 text-sm text-brand-500 bg-white text-center">
-                <div className="text-3xl mb-2">🌡️</div>
-                Agrega una OV con producto para habilitar el monitoreo de temperatura.
+              <div className="rounded-2xl border border-dashed border-brand-200 p-10 bg-white text-center">
+                <svg className="w-8 h-8 mx-auto mb-3 text-brand-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                </svg>
+                <p className="text-sm font-medium text-brand-600">Sin datos de temperatura</p>
+                <p className="text-xs text-brand-400 mt-1">Agrega una OV con producto para habilitar el monitoreo.</p>
               </div>
             )}
           </div>
@@ -1515,11 +1553,14 @@ export function ViajeDetail({
           )}
 
           {ordenes.length === 0 && !showOVFormPanel ? (
-            <div className="rounded-2xl border border-dashed border-brand-200 p-8 text-center bg-white">
-              <div className="text-3xl mb-2">📦</div>
-              <div className="text-sm text-brand-500">
-                Sin órdenes de venta aún. Agrega la primera OV.
-              </div>
+            <div className="rounded-2xl border border-dashed border-brand-200 p-10 text-center bg-white">
+              <svg className="w-8 h-8 mx-auto mb-3 text-brand-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+              <p className="text-sm font-medium text-brand-600">Sin órdenes de venta</p>
+              <p className="text-xs text-brand-400 mt-1">Agrega la primera OV para este viaje.</p>
             </div>
           ) : (
             ordenes.length > 0 && (
@@ -1637,9 +1678,9 @@ export function ViajeDetail({
                       >
                         {Number(l.temperatura).toFixed(1)}°C
                       </td>
-                      <td className="px-4 py-2 font-mono text-xs text-brand-400 hidden sm:table-cell">
+                      <td className="px-4 py-2 text-xs text-brand-400 hidden sm:table-cell">
                         {l.lat != null && l.lng != null
-                          ? `${Number(l.lat).toFixed(3)}, ${Number(l.lng).toFixed(3)}`
+                          ? <GeoCell lat={Number(l.lat)} lng={Number(l.lng)} />
                           : "—"}
                       </td>
                     </tr>
@@ -1663,10 +1704,13 @@ export function ViajeDetail({
                     className="px-5 py-3 text-sm flex items-center justify-between gap-3"
                   >
                     <div>
-                      <div className="font-medium text-brand-900">
-                        {a.tipo === "TEMP_ALTA" ? "🔴 Temp ALTA" : "🔵 Temp BAJA"}
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${a.tipo === "TEMP_ALTA" ? "bg-red-500" : "bg-blue-400"}`} />
+                        <span className="font-medium text-brand-900">
+                          {a.tipo === "TEMP_ALTA" ? "Temp. alta" : "Temp. baja"}
+                        </span>
                         {a.temperatura != null && (
-                          <span className="ml-2 text-brand-500">
+                          <span className="text-brand-500 font-normal tabular-nums">
                             {Number(a.temperatura).toFixed(1)}°C
                           </span>
                         )}

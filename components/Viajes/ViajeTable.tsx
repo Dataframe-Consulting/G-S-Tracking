@@ -265,11 +265,11 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
 
         {filtered.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-brand-200 p-12 text-center bg-white">
-            <div className="text-4xl mb-3">🔍</div>
-            <div className="font-display font-semibold text-brand-900 text-lg">Sin resultados</div>
-            <div className="text-sm text-brand-500 mt-1">
-              No hay viajes que coincidan con los filtros aplicados.
-            </div>
+            <svg className="w-9 h-9 mx-auto mb-3 text-brand-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <p className="text-sm font-semibold text-brand-700">Sin resultados</p>
+            <p className="text-sm text-brand-400 mt-1">No hay viajes que coincidan con los filtros aplicados.</p>
           </div>
         ) : (
           <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">

@@ -42,7 +42,7 @@ const BRAND = {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-base font-semibold text-brand-900 tracking-tight">
+    <h2 className="text-sm font-semibold text-brand-700">
       {children}
     </h2>
   );
@@ -56,9 +56,9 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-brand-100 rounded-2xl p-5 shadow-sm">
+    <div className="bg-white border border-brand-100 rounded-xl p-5 shadow-[0_1px_16px_-6px_rgba(0,0,0,0.08)]">
       <SectionTitle>{title}</SectionTitle>
-      <div className="mt-4 bg-slate-50 rounded-xl p-3">{children}</div>
+      <div className="mt-4">{children}</div>
     </div>
   );
 }

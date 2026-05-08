@@ -50,13 +50,13 @@ export default function MapaTracker({
   return (
     <MapContainer
       center={center}
-      zoom={position ? 9 : 5}
+      zoom={position ? 14 : 5}
       scrollWheelZoom
       className="h-full w-full rounded-xl overflow-hidden"
     >
       <TileLayer
-        attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a>'
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
       {polyline.length > 1 && (
         <Polyline positions={polyline} pathOptions={{ color: "#085041", weight: 3, opacity: 0.7 }} />

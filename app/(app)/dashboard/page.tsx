@@ -48,9 +48,10 @@ export default async function DashboardPage({
 
   if (productoId) q = q.eq("producto_id", productoId);
 
-  const [{ data }, { data: productosData }] = await Promise.all([
+  const [{ data }, { data: productosData }, { count: alertasCount }] = await Promise.all([
     q,
     supabase.from("productos").select("*").order("nombre"),
+    supabase.from("viajes").select("*", { count: "exact", head: true }).eq("alerta_activa", true),
   ]);
 
   const ordenes = (data ?? []) as (OrdenVenta & { viaje: { id: string; flete_cargo: string | null; alerta_activa: boolean } | null })[];
@@ -59,7 +60,7 @@ export default async function DashboardPage({
   // KPIs
   const total = ordenes.length;
   const enTransito = ordenes.filter((o) => o.status === "TRANSITO").length;
-  const alertas = ordenes.filter((o) => o.viaje?.alerta_activa).length;
+  const alertas = alertasCount ?? 0;
   const entregadas = ordenes.filter(
     (o) => o.status === "ENTREGADO" || o.status === "RECIBIDO"
   ).length;
@@ -111,11 +112,11 @@ export default async function DashboardPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display font-extrabold text-3xl text-brand-900 tracking-tight">
+        <h1 className="font-display font-bold text-2xl text-brand-900 tracking-tight">
           Dashboard
         </h1>
-        <p className="text-sm text-brand-500 mt-0.5">
-          Operación — temperatura, ubicación y alertas en tiempo real.
+        <p className="text-sm text-brand-400 mt-0.5">
+          Temperatura, ubicación y alertas en tiempo real.
         </p>
       </div>
 
