@@ -5,7 +5,7 @@ import { checkAlertas } from "./alertas";
 
 type ViajeRow = {
   id: string;
-  termografo_id: string;
+  termografo_ids: string[];
   ordenes_venta: Array<{
     produto: { temp_min: number; temp_max: number } | null;
   }>;
@@ -28,65 +28,115 @@ function getTempRange(viaje: ViajeRow) {
   };
 }
 
-async function persistReadings(
+type DeviceReadings = { termografoId: string; readings: CopelandReading[] };
+
+async function persistMultipleReadings(
   supabase: SupabaseClient,
   viaje: ViajeRow,
-  readings: CopelandReading[],
+  devices: DeviceReadings[],
   productTempMin: number | undefined,
   productTempMax: number | undefined
 ) {
-  const rows = readings.map((r) => ({
-    viaje_id: viaje.id,
-    termografo_id: r.device_id,
-    temperatura: r.temperature,
-    lat: r.latitude,
-    lng: r.longitude,
-    timestamp: r.timestamp,
-    fuera_rango:
-      productTempMin != null &&
-      productTempMax != null &&
-      (r.temperature < productTempMin || r.temperature > productTempMax),
-  }));
+  const rows = devices.flatMap(({ termografoId, readings }) =>
+    readings.map((r) => ({
+      viaje_id: viaje.id,
+      termografo_id: termografoId,
+      temperatura: r.temperature,
+      lat: r.latitude,
+      lng: r.longitude,
+      timestamp: r.timestamp,
+      fuera_rango:
+        productTempMin != null &&
+        productTempMax != null &&
+        (r.temperature < productTempMin || r.temperature > productTempMax),
+    }))
+  );
 
   await supabase.from("lecturas_temperatura").insert(rows);
 
-  const latest = readings.at(-1)!;
+  // Average of each device's latest reading
+  const latestTemps = devices.map(({ readings }) => readings.at(-1)!.temperature);
+  const avgTemp = latestTemps.reduce((a, b) => a + b, 0) / latestTemps.length;
+
+  // Most recent reading across all devices (for lat/lng/timestamp)
+  const allReadings = devices.flatMap((d) => d.readings);
+  const latest = allReadings.reduce((a, b) =>
+    new Date(a.timestamp) > new Date(b.timestamp) ? a : b
+  );
+
   await Promise.all([
     supabase
       .from("viajes")
       .update({
-        temp_actual: latest.temperature,
+        temp_actual: avgTemp,
         lat: latest.latitude,
         lng: latest.longitude,
         ultima_lectura: latest.timestamp,
         updated_at: new Date().toISOString(),
       })
       .eq("id", viaje.id),
-    supabase
-      .from("termografos")
-      .update({ ultima_actividad: latest.timestamp })
-      .eq("id", viaje.termografo_id),
+    ...devices.map(({ termografoId, readings }) =>
+      supabase
+        .from("termografos")
+        .update({ ultima_actividad: readings.at(-1)!.timestamp })
+        .eq("id", termografoId)
+    ),
   ]);
 }
 
-export async function runSync(supabase: SupabaseClient, viajeId?: string | null) {
+async function loadViajes(
+  supabase: SupabaseClient,
+  viajeId?: string | null
+): Promise<ViajeRow[]> {
   let q = supabase
-    .from("viajes")
-    .select(`id, termografo_id, ordenes_venta ( produto:productos ( temp_min, temp_max ) )`)
-    .not("termografo_id", "is", null);
+    .from("termografos")
+    .select(`id, viaje_id, viajes!inner(id, ordenes_venta(produto:productos(temp_min, temp_max)))`)
+    .eq("asignado", true);
 
-  if (viajeId) q = q.eq("id", viajeId);
+  if (viajeId) q = q.eq("viaje_id", viajeId);
 
-  const { data: viajes, error } = await q;
-  if (error) return { error: error.message, updated: 0 };
-  if (!viajes || viajes.length === 0) return { updated: 0 };
+  const { data, error } = await q;
+  if (error || !data) return [];
+
+  type RawRow = {
+    id: string;
+    viaje_id: string;
+    viajes: unknown;
+  };
+
+  // Group by viaje_id → ViajeRow
+  const map = new Map<string, ViajeRow>();
+  for (const t of (data as unknown as RawRow[])) {
+    if (!t.viaje_id) continue;
+    const viajeRaw = (Array.isArray(t.viajes) ? t.viajes[0] : t.viajes) as {
+      id: string;
+      ordenes_venta: ViajeRow["ordenes_venta"];
+    } | null;
+    if (!viajeRaw) continue;
+    const existing = map.get(t.viaje_id);
+    if (existing) {
+      existing.termografo_ids.push(t.id);
+    } else {
+      map.set(t.viaje_id, {
+        id: t.viaje_id,
+        termografo_ids: [t.id],
+        ordenes_venta: viajeRaw.ordenes_venta,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
+export async function runSync(supabase: SupabaseClient, viajeId?: string | null) {
+  const viajes = await loadViajes(supabase, viajeId);
+  if (viajes.length === 0) return { updated: 0 };
 
   const simulate = process.env.COPELAND_SIMULATE !== "false";
 
   if (simulate) {
-    return runSimSync(supabase, viajes as ViajeRow[]);
+    return runSimSync(supabase, viajes);
   }
-  return runRealSync(supabase, viajes as ViajeRow[], viajeId ?? null);
+  return runRealSync(supabase, viajes, viajeId ?? null);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,10 +148,16 @@ async function runSimSync(supabase: SupabaseClient, viajes: ViajeRow[]) {
 
   for (const viaje of viajes) {
     const { productTempMin, productTempMax } = getTempRange(viaje);
-    const readings = simulateDeviceReadings(viaje.termografo_id, { productTempMin, productTempMax });
-    if (readings.length === 0) continue;
 
-    await persistReadings(supabase, viaje, readings, productTempMin, productTempMax);
+    const devices: DeviceReadings[] = [];
+    for (const termografoId of viaje.termografo_ids) {
+      const readings = simulateDeviceReadings(termografoId, { productTempMin, productTempMax });
+      if (readings.length > 0) devices.push({ termografoId, readings });
+    }
+
+    if (devices.length === 0) continue;
+
+    await persistMultipleReadings(supabase, viaje, devices, productTempMin, productTempMax);
     const res = await checkAlertas(supabase, viaje.id, productTempMin, productTempMax);
     alertResults.push(res);
     updated++;
@@ -118,11 +174,14 @@ async function runRealSync(
   viajes: ViajeRow[],
   filterViajeId: string | null
 ) {
-  // Mapa trackerId → viaje para lookup rápido
+  // Map trackerId → viaje
   const trackerMap = new Map<string, ViajeRow>();
-  for (const v of viajes) trackerMap.set(v.termografo_id, v);
+  for (const v of viajes) {
+    for (const tid of v.termografo_ids) {
+      trackerMap.set(tid, v);
+    }
+  }
 
-  // Cargar cursor global (sólo en sync global, no por viaje)
   let cursor: string | null = null;
   if (!filterViajeId) {
     const { data } = await supabase
@@ -133,8 +192,8 @@ async function runRealSync(
     cursor = (data?.value as { last_guid?: string } | null)?.last_guid ?? null;
   }
 
-  // Agrupar lecturas por viaje drenando todas las páginas
-  const byViaje = new Map<string, CopelandReading[]>();
+  // Group readings by viaje → device
+  const byViaje = new Map<string, Map<string, CopelandReading[]>>();
   const rawPages: unknown[] = [];
   let newCursor = cursor;
   let hasMore = true;
@@ -146,30 +205,34 @@ async function runRealSync(
     for (const r of result.readings) {
       const viaje = trackerMap.get(r.device_id);
       if (!viaje) continue;
-      const list = byViaje.get(viaje.id) ?? [];
-      list.push(r);
-      byViaje.set(viaje.id, list);
+      const deviceMap = byViaje.get(viaje.id) ?? new Map<string, CopelandReading[]>();
+      const deviceReadings = deviceMap.get(r.device_id) ?? [];
+      deviceReadings.push(r);
+      deviceMap.set(r.device_id, deviceReadings);
+      byViaje.set(viaje.id, deviceMap);
     }
 
     if (result.maxGuid) newCursor = result.maxGuid;
-    // Parar si no hay más páginas o si la página vino vacía
     hasMore = result.hasMore && result.readings.length > 0;
   }
 
   let updated = 0;
   const alertResults: unknown[] = [];
 
-  for (const [vid, readings] of byViaje.entries()) {
+  for (const [vid, deviceMap] of byViaje.entries()) {
     const viaje = viajes.find((v) => v.id === vid)!;
     const { productTempMin, productTempMax } = getTempRange(viaje);
 
-    await persistReadings(supabase, viaje, readings, productTempMin, productTempMax);
+    const devices: DeviceReadings[] = Array.from(deviceMap.entries()).map(
+      ([termografoId, readings]) => ({ termografoId, readings })
+    );
+
+    await persistMultipleReadings(supabase, viaje, devices, productTempMin, productTempMax);
     const res = await checkAlertas(supabase, vid, productTempMin, productTempMax);
     alertResults.push(res);
     updated++;
   }
 
-  // Avanzar cursor global (sólo sync global)
   if (!filterViajeId && newCursor && newCursor !== cursor) {
     await supabase.from("config").upsert(
       {

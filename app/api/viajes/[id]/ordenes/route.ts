@@ -42,6 +42,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     viaje_id: params.id,
     ov_ref: body.ov_ref,
     cliente: body.cliente,
+    cedi: body.cedi ?? null,
     fecha_carga: body.fecha_carga,
     lugar_carga: body.lugar_carga,
     fecha_entrega: body.fecha_entrega,

@@ -17,6 +17,7 @@ export async function PATCH(
   const allowed = [
     "ov_ref",
     "cliente",
+    "cedi",
     "fecha_carga",
     "lugar_carga",
     "fecha_entrega",

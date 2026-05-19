@@ -12,6 +12,7 @@ import type {
   ProductoCombinacion,
   Responsable,
   Status,
+  Termografo,
   Transportista,
   Viaje,
 } from "@/lib/types";
@@ -122,6 +123,7 @@ function productoSelFromOV(ov: OrdenVenta): string {
 type OVFormData = {
   ov_ref: string;
   cliente: string;
+  cedi: string;
   fecha_carga: string;
   lugar_carga: string;
   fecha_entrega: string;
@@ -134,9 +136,12 @@ type OVFormData = {
   cajas_b: string;
 };
 
+type ClienteConCedis = { id: string; nombre: string; cedis?: { id: string; nombre: string }[] };
+
 const emptyOVForm = (today: string): OVFormData => ({
   ov_ref: "",
   cliente: "",
+  cedi: "",
   fecha_carga: today,
   lugar_carga: "",
   fecha_entrega: today,
@@ -162,7 +167,7 @@ function OVFormPanel({
   editingOV: OrdenVenta | null;
   productos: Producto[];
   combinaciones: ProductoCombinacion[];
-  clientes: { id: string; nombre: string }[];
+  clientes: ClienteConCedis[];
   onSaved: (ov: OrdenVenta) => void;
   onCancel: () => void;
 }) {
@@ -172,6 +177,7 @@ function OVFormPanel({
       ? {
           ov_ref: editingOV.ov_ref,
           cliente: editingOV.cliente,
+          cedi: editingOV.cedi ?? "",
           fecha_carga: editingOV.fecha_carga,
           lugar_carga: editingOV.lugar_carga,
           fecha_entrega: editingOV.fecha_entrega,
@@ -196,6 +202,8 @@ function OVFormPanel({
   const selectedCombo = isCombo
     ? combinaciones.find((c) => c.id === form.producto_sel.slice(6))
     : null;
+  const clienteCedis =
+    clientes.find((c) => c.nombre === form.cliente)?.cedis ?? [];
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -203,11 +211,16 @@ function OVFormPanel({
       toast.error("Selecciona un producto");
       return;
     }
+    if (clienteCedis.length > 0 && !form.cedi) {
+      toast.error("Selecciona un cedi");
+      return;
+    }
     setSaving(true);
     const { producto_id, producto_combinacion_id } = parseProductoSel(form.producto_sel);
     const body = {
       ov_ref: form.ov_ref,
       cliente: form.cliente,
+      cedi: form.cedi || null,
       fecha_carga: form.fecha_carga,
       lugar_carga: form.lugar_carga,
       fecha_entrega: form.fecha_entrega,
@@ -266,7 +279,10 @@ function OVFormPanel({
           <select
             required
             value={form.cliente}
-            onChange={(e) => upd("cliente", e.target.value)}
+            onChange={(e) => {
+              upd("cliente", e.target.value);
+              upd("cedi", "");
+            }}
             className={`${fieldCls} bg-white mt-1`}
           >
             <option value="">— Selecciona cliente —</option>
@@ -277,6 +293,24 @@ function OVFormPanel({
             ))}
           </select>
         </label>
+        {clienteCedis.length > 0 && (
+          <label className="block text-xs font-medium text-brand-700">
+            Cedi *
+            <select
+              required
+              value={form.cedi}
+              onChange={(e) => upd("cedi", e.target.value)}
+              className={`${fieldCls} bg-white mt-1`}
+            >
+              <option value="">— Selecciona cedi —</option>
+              {clienteCedis.map((d) => (
+                <option key={d.id} value={d.nombre}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block text-xs font-medium text-brand-700">
           Estatus
           <select
@@ -464,7 +498,7 @@ function OVDetailModal({
   viaje_id: string;
   productos: Producto[];
   combinaciones: ProductoCombinacion[];
-  clientes: { id: string; nombre: string }[];
+  clientes: ClienteConCedis[];
   initialEditing?: boolean;
   onClose: () => void;
   onSaved: (ov: OrdenVenta) => void;
@@ -475,6 +509,7 @@ function OVDetailModal({
   const [form, setForm] = useState<OVFormData>(() => ({
     ov_ref: initialOv.ov_ref,
     cliente: initialOv.cliente,
+    cedi: initialOv.cedi ?? "",
     fecha_carga: initialOv.fecha_carga,
     lugar_carga: initialOv.lugar_carga,
     fecha_entrega: initialOv.fecha_entrega,
@@ -496,6 +531,7 @@ function OVDetailModal({
     setForm({
       ov_ref: ov.ov_ref,
       cliente: ov.cliente,
+      cedi: ov.cedi ?? "",
       fecha_carga: ov.fecha_carga,
       lugar_carga: ov.lugar_carga,
       fecha_entrega: ov.fecha_entrega,
@@ -510,14 +546,22 @@ function OVDetailModal({
     setIsEditing(true);
   }
 
+  const modalClienteCedis =
+    clientes.find((c) => c.nombre === form.cliente)?.cedis ?? [];
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!form.producto_sel) { toast.error("Selecciona un producto"); return; }
+    if (modalClienteCedis.length > 0 && !form.cedi) {
+      toast.error("Selecciona un cedi");
+      return;
+    }
     setSaving(true);
     const { producto_id, producto_combinacion_id } = parseProductoSel(form.producto_sel);
     const body = {
       ov_ref: form.ov_ref,
       cliente: form.cliente,
+      cedi: form.cedi || null,
       fecha_carga: form.fecha_carga,
       lugar_carga: form.lugar_carga,
       fecha_entrega: form.fecha_entrega,
@@ -609,21 +653,39 @@ function OVDetailModal({
                 </label>
               </div>
 
-              {/* Cliente */}
-              <label className="block text-xs font-medium text-brand-700">
-                Cliente *
-                <select
-                  required
-                  value={form.cliente}
-                  onChange={(e) => upd("cliente", e.target.value)}
-                  className={`${fieldCls} bg-white mt-1`}
-                >
-                  <option value="">— Selecciona cliente —</option>
-                  {clientes.map((c) => (
-                    <option key={c.id} value={c.nombre}>{c.nombre}</option>
-                  ))}
-                </select>
-              </label>
+              {/* Cliente + Cedi */}
+              <div className={`grid gap-3 ${modalClienteCedis.length > 0 ? "sm:grid-cols-2" : ""}`}>
+                <label className="block text-xs font-medium text-brand-700">
+                  Cliente *
+                  <select
+                    required
+                    value={form.cliente}
+                    onChange={(e) => { upd("cliente", e.target.value); upd("cedi", ""); }}
+                    className={`${fieldCls} bg-white mt-1`}
+                  >
+                    <option value="">— Selecciona cliente —</option>
+                    {clientes.map((c) => (
+                      <option key={c.id} value={c.nombre}>{c.nombre}</option>
+                    ))}
+                  </select>
+                </label>
+                {modalClienteCedis.length > 0 && (
+                  <label className="block text-xs font-medium text-brand-700">
+                    Cedi *
+                    <select
+                      required
+                      value={form.cedi}
+                      onChange={(e) => upd("cedi", e.target.value)}
+                      className={`${fieldCls} bg-white mt-1`}
+                    >
+                      <option value="">— Selecciona cedi —</option>
+                      {modalClienteCedis.map((d) => (
+                        <option key={d.id} value={d.nombre}>{d.nombre}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
 
               {/* Carga */}
               <div className="grid sm:grid-cols-3 gap-3">
@@ -809,6 +871,9 @@ function OVDetailModal({
               <div>
                 <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">Cliente</div>
                 <div className="text-sm font-semibold text-brand-900">{ov.cliente}</div>
+                {ov.cedi && (
+                  <div className="text-xs text-brand-500 mt-0.5">{ov.cedi}</div>
+                )}
               </div>
 
               {/* Carga / Entrega */}
@@ -899,11 +964,11 @@ function OVDetailModal({
 function TermografoModalContent({
   viajeId,
   onClose,
-  onAssigned,
+  onAdded,
 }: {
   viajeId: string;
   onClose: () => void;
-  onAssigned: (id: string) => void;
+  onAdded: (termografos: Termografo[]) => void;
 }) {
   const [input, setInput] = useState("");
   const [saving, setSaving] = useState(false);
@@ -912,15 +977,16 @@ function TermografoModalContent({
     const id = input.trim();
     if (!id) return;
     setSaving(true);
-    const res = await fetch(`/api/viajes/${viajeId}`, {
-      method: "PATCH",
+    const res = await fetch(`/api/viajes/${viajeId}/termografos`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ termografo_id: id }),
     });
     setSaving(false);
     if (res.ok) {
+      const json = await res.json();
       toast.success("Termógrafo conectado");
-      onAssigned(id);
+      onAdded(json.termografos ?? []);
     } else {
       const json = await res.json();
       toast.error(json.error || "Error al conectar");
@@ -930,7 +996,7 @@ function TermografoModalContent({
   return (
     <>
       <div className="font-display font-extrabold text-lg text-brand-900 mb-1">
-        Conectar termógrafo
+        Agregar termógrafo
       </div>
       <p className="text-sm text-brand-500 mb-4">
         Ingresa el número de serie del dispositivo Copeland (impreso en el termógrafo físico).
@@ -976,16 +1042,20 @@ export function ViajeDetail({
   viaje: initialViaje,
   lecturas: initialLecturas,
   alertas,
+  termografos: initialTermografos,
 }: {
   viaje: Viaje;
   lecturas: LecturaTemperatura[];
   alertas: AlertaLog[];
+  termografos: Termografo[];
 }) {
   const router = useRouter();
   const [viaje, setViaje] = useState(initialViaje);
   const [ordenes, setOrdenes] = useState<OrdenVenta[]>(initialViaje.ordenes_venta ?? []);
   const [lecturas, setLecturas] = useState(initialLecturas);
   const [syncing, setSyncing] = useState(false);
+  const [termografos, setTermografos] = useState<Termografo[]>(initialTermografos);
+  const [activeTermografoIdx, setActiveTermografoIdx] = useState(0);
 
   // Viaje edit
   const [editingViaje, setEditingViaje] = useState(false);
@@ -1008,7 +1078,7 @@ export function ViajeDetail({
   const [detailOVEdit, setDetailOVEdit] = useState(false);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [combinaciones, setCombinaciones] = useState<ProductoCombinacion[]>([]);
-  const [clientes, setClientes] = useState<{ id: string; nombre: string }[]>([]);
+  const [clientes, setClientes] = useState<ClienteConCedis[]>([]);
   const [transportistas, setTransportistas] = useState<Transportista[]>([]);
   const [usuarios, setUsuarios] = useState<
     { id: string; nombre: string | null; email: string | null }[]
@@ -1036,6 +1106,28 @@ export function ViajeDetail({
     () => (tempRanges.length > 0 ? Math.min(...tempRanges.map((p) => Number(p.temp_max))) : null),
     [tempRanges]
   );
+
+  const lecturasByTermografo = useMemo(() => {
+    const map = new Map<string, LecturaTemperatura[]>();
+    for (const l of lecturas) {
+      const list = map.get(l.termografo_id) ?? [];
+      list.push(l);
+      map.set(l.termografo_id, list);
+    }
+    return map;
+  }, [lecturas]);
+
+  const tempDeCarga = useMemo(() => {
+    if (termografos.length === 0) return null;
+    const latest = termografos
+      .map((t) => {
+        const tLecturas = lecturasByTermografo.get(t.id) ?? [];
+        return tLecturas[0]?.temperatura != null ? Number(tLecturas[0].temperatura) : null;
+      })
+      .filter((v): v is number => v !== null);
+    if (latest.length === 0) return null;
+    return latest.reduce((a, b) => a + b, 0) / latest.length;
+  }, [termografos, lecturasByTermografo]);
 
   async function loadFormData() {
     const fetches = [];
@@ -1238,8 +1330,8 @@ export function ViajeDetail({
             <TermografoModalContent
               viajeId={viaje.id}
               onClose={() => setShowTermografoModal(false)}
-              onAssigned={(id) => {
-                setViaje((prev) => ({ ...prev, termografo_id: id }));
+              onAdded={(updated) => {
+                setTermografos(updated);
                 setShowTermografoModal(false);
                 router.refresh();
               }}
@@ -1288,7 +1380,7 @@ export function ViajeDetail({
         <div className="flex flex-col items-end gap-2">
           <button
             onClick={doSync}
-            disabled={syncing || !viaje.termografo_id}
+            disabled={syncing || termografos.length === 0}
             className="rounded-xl bg-brand-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 transition shadow-sm"
           >
             {syncing ? "Sincronizando…" : "Sincronizar ahora"}
@@ -1446,31 +1538,43 @@ export function ViajeDetail({
             </div>
           )}
 
-          {/* Termógrafo */}
+          {/* Termógrafos */}
           <div className="rounded-xl border border-brand-100 bg-white px-4 py-3">
-            <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">
-              Termógrafo
+            <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">
+              Termógrafos
             </div>
-            {viaje.termografo_id ? (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium font-mono text-brand-900">
-                  {viaje.termografo_id}
-                </span>
-                <button
-                  onClick={() => setShowTermografoModal(true)}
-                  className="text-xs text-brand-500 hover:text-brand-900 transition"
-                >
-                  Cambiar
-                </button>
-              </div>
-            ) : (
+            <div className="space-y-1.5">
+              {termografos.map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium font-mono text-brand-900">{t.id}</span>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch(
+                        `/api/viajes/${viaje.id}/termografos/${encodeURIComponent(t.id)}`,
+                        { method: "DELETE" }
+                      );
+                      if (res.ok) {
+                        setTermografos((prev) => prev.filter((x) => x.id !== t.id));
+                        setActiveTermografoIdx(0);
+                        toast.success("Termógrafo desconectado");
+                        router.refresh();
+                      } else {
+                        toast.error("Error al desconectar");
+                      }
+                    }}
+                    className="text-xs text-brand-400 hover:text-red-500 transition"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ))}
               <button
                 onClick={() => setShowTermografoModal(true)}
-                className="rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-400 transition w-full text-left"
+                className="rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-400 transition w-full text-left mt-1"
               >
                 + Agregar termógrafo
               </button>
-            )}
+            </div>
           </div>
 
           <InfoCell
@@ -1481,6 +1585,23 @@ export function ViajeDetail({
                 : "—"
             }
           />
+
+          {/* Temperatura de carga */}
+          {termografos.length > 0 && (
+            <div className="rounded-xl border border-brand-100 bg-white px-4 py-3 flex flex-col items-center justify-center text-center">
+              <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">
+                Temperatura de carga
+              </div>
+              <div className="text-2xl font-bold text-brand-900">
+                {tempDeCarga != null ? `${tempDeCarga.toFixed(1)}°C` : "—"}
+              </div>
+              {termografos.length > 1 && (
+                <div className="text-[11px] text-brand-400 mt-1">
+                  Promedio de {termografos.length} termógrafos
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1498,14 +1619,89 @@ export function ViajeDetail({
           </div>
           <div className="space-y-3">
             {tempMin != null && tempMax != null ? (
-              <>
-                <TempGauge
-                  value={viaje.temp_actual != null ? Number(viaje.temp_actual) : null}
-                  min={tempMin}
-                  max={tempMax}
-                />
-                <TempChart lecturas={lecturas} min={tempMin} max={tempMax} />
-              </>
+              termografos.length > 0 ? (
+                <div>
+                  {/* Carousel header */}
+                  {termografos.length > 1 && (
+                    <div className="flex items-center justify-between mb-3 px-0.5">
+                      <button
+                        onClick={() => setActiveTermografoIdx((i) => Math.max(0, i - 1))}
+                        disabled={activeTermografoIdx === 0}
+                        className="rounded-lg p-1.5 hover:bg-brand-50 disabled:opacity-30 transition text-brand-600"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m15 18-6-6 6-6"/>
+                        </svg>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-medium text-brand-700">
+                          {termografos[activeTermografoIdx]?.id}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {termografos.map((_, i) => (
+                            <button
+                              key={i}
+                              onClick={() => setActiveTermografoIdx(i)}
+                              className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                                i === activeTermografoIdx ? "bg-brand-700" : "bg-brand-200"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs text-brand-400">
+                          {activeTermografoIdx + 1}/{termografos.length}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() =>
+                          setActiveTermografoIdx((i) => Math.min(termografos.length - 1, i + 1))
+                        }
+                        disabled={activeTermografoIdx === termografos.length - 1}
+                        className="rounded-lg p-1.5 hover:bg-brand-50 disabled:opacity-30 transition text-brand-600"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m9 18 6-6-6-6"/>
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Slides */}
+                  <div className="overflow-hidden">
+                    <div
+                      className="flex transition-transform duration-300 ease-in-out"
+                      style={{ transform: `translateX(-${activeTermografoIdx * 100}%)` }}
+                    >
+                      {termografos.map((t) => {
+                        const tLecturas = lecturasByTermografo.get(t.id) ?? [];
+                        const latestTemp =
+                          tLecturas[0]?.temperatura != null
+                            ? Number(tLecturas[0].temperatura)
+                            : null;
+                        return (
+                          <div key={t.id} className="min-w-full space-y-3">
+                            <TempGauge value={latestTemp} min={tempMin} max={tempMax} />
+                            <TempChart
+                              lecturas={tLecturas}
+                              min={tempMin}
+                              max={tempMax}
+                              viajeId={viaje.id}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-brand-200 p-10 bg-white text-center">
+                  <svg className="w-8 h-8 mx-auto mb-3 text-brand-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                  </svg>
+                  <p className="text-sm font-medium text-brand-600">Sin termógrafo asignado</p>
+                  <p className="text-xs text-brand-400 mt-1">Agrega un termógrafo en los datos del viaje.</p>
+                </div>
+              )
             ) : (
               <div className="rounded-2xl border border-dashed border-brand-200 p-10 bg-white text-center">
                 <svg className="w-8 h-8 mx-auto mb-3 text-brand-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1596,7 +1792,12 @@ export function ViajeDetail({
                               {ov.ov_ref}
                             </span>
                           </td>
-                          <td className="px-4 py-3 font-medium text-brand-900">{ov.cliente}</td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-brand-900">{ov.cliente}</div>
+                            {ov.cedi && (
+                              <div className="text-xs text-brand-400 mt-0.5">{ov.cedi}</div>
+                            )}
+                          </td>
                           <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
                             <div>{ov.fecha_carga}</div>
                             <div className="text-brand-400">{ov.lugar_carga}</div>

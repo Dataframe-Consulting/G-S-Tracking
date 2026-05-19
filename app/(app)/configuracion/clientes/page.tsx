@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { CatalogoClient } from "@/components/configuracion/CatalogoClient";
+import { ClientesConCedisClient } from "@/components/configuracion/ClientesConCedisClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClientesPage() {
   const supabase = createServerSupabase();
-  const { data } = await supabase.from("clientes").select("*").order("nombre");
+  const { data } = await supabase
+    .from("clientes")
+    .select("*, cedis(*)")
+    .order("nombre");
 
   return (
     <div className="space-y-6">
@@ -18,17 +21,10 @@ export default async function ClientesPage() {
           Clientes
         </h1>
         <p className="text-sm text-brand-500 mt-0.5">
-          Directorio de clientes de la operación.
+          Directorio de clientes y sus centros de distribución (cedis).
         </p>
       </div>
-      <CatalogoClient
-        endpoint="/api/clientes"
-        initialData={data ?? []}
-        fields={[
-          { key: "nombre",   label: "Nombre del cliente",  placeholder: "Ej. Walmart México", primary: true },
-          { key: "contacto", label: "Contacto", placeholder: "Correo, teléfono, etc.", required: false }
-        ]}
-      />
+      <ClientesConCedisClient initialData={data ?? []} />
     </div>
   );
 }

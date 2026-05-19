@@ -64,6 +64,7 @@ export interface OrdenVenta {
   instrucciones: string;
   producto_id: string | null;
   producto_combinacion_id: string | null;
+  cedi: string | null;
   cajas: number | null;
   cajas_b: number | null;
   created_at: string;
@@ -97,6 +98,7 @@ export interface Viaje {
   updated_at: string;
   ordenes_venta?: OrdenVenta[];
   responsable?: Responsable | null;
+  termografos?: Termografo[];
 }
 
 export interface LecturaTemperatura {
@@ -145,11 +147,19 @@ export interface UserProfile {
   created_at: string;
 }
 
+export interface Cedi {
+  id: string;
+  cliente_id: string;
+  nombre: string;
+  created_at: string;
+}
+
 export interface Cliente {
   id: string;
   nombre: string;
   contacto: string | null;
   created_at: string;
+  cedis?: Cedi[];
 }
 
 export interface Transportista {
