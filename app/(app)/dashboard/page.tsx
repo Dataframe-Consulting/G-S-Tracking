@@ -61,9 +61,7 @@ export default async function DashboardPage({
   const total = ordenes.length;
   const enTransito = ordenes.filter((o) => o.status === "TRANSITO").length;
   const alertas = alertasCount ?? 0;
-  const entregadas = ordenes.filter(
-    (o) => o.status === "ENTREGADO" || o.status === "RECIBIDO"
-  ).length;
+  const entregadas = ordenes.filter((o) => o.status === "ENTREGADO").length;
 
   // Chart 1: ordenes por fecha
   const fechaMap = new Map<string, ChartCargaRow>();
@@ -81,7 +79,7 @@ export default async function DashboardPage({
     const row = fechaMap.get(f)!;
     row.total++;
     if (o.status === "TRANSITO") row.transito++;
-    if (o.status === "ENTREGADO" || o.status === "RECIBIDO") row.entregadas++;
+    if (o.status === "ENTREGADO") row.entregadas++;
     if (o.viaje?.alerta_activa) row.alertas++;
   }
   const byFecha: ChartCargaRow[] = Array.from(fechaMap.values()).sort(

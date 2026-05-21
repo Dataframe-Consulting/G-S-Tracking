@@ -23,7 +23,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     "fecha_carga",
     "lugar_carga",
     "fecha_entrega",
-    "lugar_entrega",
     "instrucciones",
   ];
   for (const k of required) {
@@ -46,7 +45,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     fecha_carga: body.fecha_carga,
     lugar_carga: body.lugar_carga,
     fecha_entrega: body.fecha_entrega,
-    lugar_entrega: body.lugar_entrega,
+    lugar_entrega: body.lugar_entrega ?? "",
     cita: body.cita ?? null,
     status: body.status ?? "PENDIENTE",
     instrucciones: body.instrucciones,

@@ -127,7 +127,6 @@ type OVFormData = {
   fecha_carga: string;
   lugar_carga: string;
   fecha_entrega: string;
-  lugar_entrega: string;
   cita: string;
   status: Status;
   instrucciones: string;
@@ -145,7 +144,6 @@ const emptyOVForm = (today: string): OVFormData => ({
   fecha_carga: today,
   lugar_carga: "",
   fecha_entrega: today,
-  lugar_entrega: "",
   cita: "",
   status: "PENDIENTE",
   instrucciones: "",
@@ -181,7 +179,6 @@ function OVFormPanel({
           fecha_carga: editingOV.fecha_carga,
           lugar_carga: editingOV.lugar_carga,
           fecha_entrega: editingOV.fecha_entrega,
-          lugar_entrega: editingOV.lugar_entrega,
           cita: editingOV.cita ?? "",
           status: editingOV.status,
           instrucciones: editingOV.instrucciones,
@@ -224,7 +221,6 @@ function OVFormPanel({
       fecha_carga: form.fecha_carga,
       lugar_carga: form.lugar_carga,
       fecha_entrega: form.fecha_entrega,
-      lugar_entrega: form.lugar_entrega,
       cita: form.cita || null,
       status: form.status,
       instrucciones: form.instrucciones,
@@ -369,18 +365,6 @@ function OVFormPanel({
           />
         </label>
         <label className="block text-xs font-medium text-brand-700">
-          Lugar de entrega *
-          <input
-            type="text"
-            required
-            placeholder="Nogales"
-            value={form.lugar_entrega}
-            onChange={(e) => upd("lugar_entrega", e.target.value)}
-            className={`${fieldCls} mt-1`}
-          />
-        </label>
-
-        <label className="block text-xs font-medium text-brand-700">
           Producto *
           <select
             value={form.producto_sel}
@@ -513,7 +497,6 @@ function OVDetailModal({
     fecha_carga: initialOv.fecha_carga,
     lugar_carga: initialOv.lugar_carga,
     fecha_entrega: initialOv.fecha_entrega,
-    lugar_entrega: initialOv.lugar_entrega,
     cita: initialOv.cita ?? "",
     status: initialOv.status,
     instrucciones: initialOv.instrucciones,
@@ -535,7 +518,6 @@ function OVDetailModal({
       fecha_carga: ov.fecha_carga,
       lugar_carga: ov.lugar_carga,
       fecha_entrega: ov.fecha_entrega,
-      lugar_entrega: ov.lugar_entrega,
       cita: ov.cita ?? "",
       status: ov.status,
       instrucciones: ov.instrucciones,
@@ -565,7 +547,6 @@ function OVDetailModal({
       fecha_carga: form.fecha_carga,
       lugar_carga: form.lugar_carga,
       fecha_entrega: form.fecha_entrega,
-      lugar_entrega: form.lugar_entrega,
       cita: form.cita || null,
       status: form.status,
       instrucciones: form.instrucciones,
@@ -721,17 +702,6 @@ function OVDetailModal({
                     required
                     value={form.fecha_entrega}
                     onChange={(e) => upd("fecha_entrega", e.target.value)}
-                    className={`${fieldCls} mt-1`}
-                  />
-                </label>
-                <label className="block text-xs font-medium text-brand-700 sm:col-span-2">
-                  Lugar de entrega *
-                  <input
-                    type="text"
-                    required
-                    placeholder="Nogales"
-                    value={form.lugar_entrega}
-                    onChange={(e) => upd("lugar_entrega", e.target.value)}
                     className={`${fieldCls} mt-1`}
                   />
                 </label>
@@ -1053,7 +1023,6 @@ export function ViajeDetail({
   const [viaje, setViaje] = useState(initialViaje);
   const [ordenes, setOrdenes] = useState<OrdenVenta[]>(initialViaje.ordenes_venta ?? []);
   const [lecturas, setLecturas] = useState(initialLecturas);
-  const [syncing, setSyncing] = useState(false);
   const [termografos, setTermografos] = useState<Termografo[]>(initialTermografos);
   const [activeTermografoIdx, setActiveTermografoIdx] = useState(0);
 
@@ -1217,19 +1186,6 @@ export function ViajeDetail({
     }
   }
 
-  async function doSync() {
-    setSyncing(true);
-    try {
-      const res = await fetch(`/api/copeland/sync?viajeId=${viaje.id}`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-      toast.success("Sincronización completada");
-      router.refresh();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al sincronizar");
-    } finally {
-      setSyncing(false);
-    }
-  }
 
   async function handleOVSaved(ov: OrdenVenta) {
     setOrdenes((prev) => {
@@ -1378,13 +1334,6 @@ export function ViajeDetail({
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <button
-            onClick={doSync}
-            disabled={syncing || termografos.length === 0}
-            className="rounded-xl bg-brand-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 transition shadow-sm"
-          >
-            {syncing ? "Sincronizando…" : "Sincronizar ahora"}
-          </button>
           {editingViaje ? (
             <div className="flex gap-2">
               <button
@@ -1419,6 +1368,138 @@ export function ViajeDetail({
         tempMin={tempMin}
         tempMax={tempMax}
       />
+
+      {/* Órdenes de Venta */}
+      <div>
+        <div className="flex items-center gap-3 mb-3">
+          <span className="font-display font-semibold text-brand-900 text-sm uppercase tracking-widest">
+            Órdenes de Venta
+          </span>
+          <div className="flex-1 h-px bg-brand-100" />
+          {!showOVFormPanel && (
+            <button
+              onClick={async () => {
+                await loadFormData();
+                setShowOVForm(true);
+              }}
+              className="rounded-xl bg-brand-900 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-800 transition shadow-sm"
+            >
+              + Agregar OV
+            </button>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          {showOVFormPanel && (
+            <OVFormPanel
+              viaje_id={viaje.id}
+              editingOV={null}
+              productos={productos}
+              combinaciones={combinaciones}
+              clientes={clientes}
+              onSaved={handleOVSaved}
+              onCancel={() => setShowOVForm(false)}
+            />
+          )}
+
+          {ordenes.length === 0 && !showOVFormPanel ? (
+            <div className="rounded-2xl border border-dashed border-brand-200 p-10 text-center bg-white">
+              <svg className="w-8 h-8 mx-auto mb-3 text-brand-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+              <p className="text-sm font-medium text-brand-600">Sin órdenes de venta</p>
+              <p className="text-xs text-brand-400 mt-1">Agrega la primera OV para este viaje.</p>
+            </div>
+          ) : (
+            ordenes.length > 0 && (
+              <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-brand-50 text-xs uppercase tracking-widest text-brand-400">
+                        <th className="text-left px-4 py-3 font-medium">OV / REF</th>
+                        <th className="text-left px-4 py-3 font-medium">Cliente</th>
+                        <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
+                          Carga
+                        </th>
+                        <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
+                          Entrega
+                        </th>
+                        <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">
+                          Producto
+                        </th>
+                        <th className="text-left px-4 py-3 font-medium">Status</th>
+                        <th className="text-right px-4 py-3 font-medium"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-brand-50">
+                      {ordenes.map((ov) => (
+                        <tr
+                          key={ov.id}
+                          onClick={() => openOVDetail(ov)}
+                          className="hover:bg-brand-50/40 transition-colors cursor-pointer"
+                        >
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">
+                              {ov.ov_ref}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-brand-900">{ov.cliente}</div>
+                            {ov.cedi && (
+                              <div className="text-xs text-brand-400 mt-0.5">{ov.cedi}</div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
+                            <div>{ov.fecha_carga}</div>
+                            <div className="text-brand-400">{ov.lugar_carga}</div>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
+                            <div>
+                              {ov.fecha_entrega}
+                              {ov.cita ? ` · ${ov.cita}` : ""}
+                            </div>
+                            <div className="text-brand-400">{ov.lugar_entrega}</div>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell text-xs text-brand-500">
+                            {ov.producto?.nombre ?? "—"}
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <select
+                              value={ov.status}
+                              onChange={(e) => updateOVStatus(ov, e.target.value as Status)}
+                              className="text-xs rounded-lg border border-brand-200 px-2 py-1 bg-white text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            >
+                              {STATUS_VALUES.map((s) => (
+                                <option key={s} value={s}>
+                                  {STATUS_LABELS[s]}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td
+                            className="px-4 py-3 text-right"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => openOVDetail(ov, true)}
+                              className="text-xs text-brand-500 hover:text-brand-900 transition"
+                            >
+                              Editar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      </div>
 
       {/* Datos del viaje */}
       <div>
@@ -1712,138 +1793,6 @@ export function ViajeDetail({
               </div>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Órdenes de Venta */}
-      <div>
-        <div className="flex items-center gap-3 mb-3">
-          <span className="font-display font-semibold text-brand-900 text-sm uppercase tracking-widest">
-            Órdenes de Venta
-          </span>
-          <div className="flex-1 h-px bg-brand-100" />
-          {!showOVFormPanel && (
-            <button
-              onClick={async () => {
-                await loadFormData();
-                setShowOVForm(true);
-              }}
-              className="rounded-xl bg-brand-900 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-800 transition shadow-sm"
-            >
-              + Agregar OV
-            </button>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          {showOVFormPanel && (
-            <OVFormPanel
-              viaje_id={viaje.id}
-              editingOV={null}
-              productos={productos}
-              combinaciones={combinaciones}
-              clientes={clientes}
-              onSaved={handleOVSaved}
-              onCancel={() => setShowOVForm(false)}
-            />
-          )}
-
-          {ordenes.length === 0 && !showOVFormPanel ? (
-            <div className="rounded-2xl border border-dashed border-brand-200 p-10 text-center bg-white">
-              <svg className="w-8 h-8 mx-auto mb-3 text-brand-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                <line x1="12" y1="22.08" x2="12" y2="12"/>
-              </svg>
-              <p className="text-sm font-medium text-brand-600">Sin órdenes de venta</p>
-              <p className="text-xs text-brand-400 mt-1">Agrega la primera OV para este viaje.</p>
-            </div>
-          ) : (
-            ordenes.length > 0 && (
-              <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="bg-brand-50 text-xs uppercase tracking-widest text-brand-400">
-                        <th className="text-left px-4 py-3 font-medium">OV / REF</th>
-                        <th className="text-left px-4 py-3 font-medium">Cliente</th>
-                        <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
-                          Carga
-                        </th>
-                        <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
-                          Entrega
-                        </th>
-                        <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">
-                          Producto
-                        </th>
-                        <th className="text-left px-4 py-3 font-medium">Status</th>
-                        <th className="text-right px-4 py-3 font-medium"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-brand-50">
-                      {ordenes.map((ov) => (
-                        <tr
-                          key={ov.id}
-                          onClick={() => openOVDetail(ov)}
-                          className="hover:bg-brand-50/40 transition-colors cursor-pointer"
-                        >
-                          <td className="px-4 py-3">
-                            <span className="font-mono text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">
-                              {ov.ov_ref}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="font-medium text-brand-900">{ov.cliente}</div>
-                            {ov.cedi && (
-                              <div className="text-xs text-brand-400 mt-0.5">{ov.cedi}</div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
-                            <div>{ov.fecha_carga}</div>
-                            <div className="text-brand-400">{ov.lugar_carga}</div>
-                          </td>
-                          <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
-                            <div>
-                              {ov.fecha_entrega}
-                              {ov.cita ? ` · ${ov.cita}` : ""}
-                            </div>
-                            <div className="text-brand-400">{ov.lugar_entrega}</div>
-                          </td>
-                          <td className="px-4 py-3 hidden lg:table-cell text-xs text-brand-500">
-                            {ov.producto?.nombre ?? "—"}
-                          </td>
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={ov.status}
-                              onChange={(e) => updateOVStatus(ov, e.target.value as Status)}
-                              className="text-xs rounded-lg border border-brand-200 px-2 py-1 bg-white text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                            >
-                              {STATUS_VALUES.map((s) => (
-                                <option key={s} value={s}>
-                                  {STATUS_LABELS[s]}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td
-                            className="px-4 py-3 text-right"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              onClick={() => openOVDetail(ov, true)}
-                              className="text-xs text-brand-500 hover:text-brand-900 transition"
-                            >
-                              Editar
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )
-          )}
         </div>
       </div>
 

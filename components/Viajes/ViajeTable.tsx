@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { Viaje } from "@/lib/types";
+import type { Viaje, OrdenVenta } from "@/lib/types";
+import { STATUS_LABELS, STATUS_CLASSES } from "@/lib/types";
 import { TempIndicator } from "@/components/Cargas/TempIndicator";
 
 function unique(values: (string | null | undefined)[]): string[] {
@@ -144,25 +145,134 @@ function TermografoModal({
   );
 }
 
+function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
+  const ovs: OrdenVenta[] = viaje.ordenes_venta ?? [];
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-2xl max-h-[80vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-brand-50">
+          <div>
+            <div className="font-display font-bold text-brand-900">
+              {viaje.lugar_inicio}
+              <span className="text-brand-300 mx-2">→</span>
+              {viaje.lugar_fin}
+            </div>
+            <div className="text-xs text-brand-400 mt-0.5 font-mono">
+              #{String(viaje.numero).padStart(4, "0")} · {ovs.length} OV{ovs.length !== 1 ? "s" : ""}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-brand-400 hover:text-brand-700 hover:bg-brand-50 transition"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div className="overflow-y-auto">
+          {ovs.length === 0 ? (
+            <p className="text-sm text-brand-400 text-center py-10">Sin órdenes de venta.</p>
+          ) : (
+            <table className="min-w-full text-sm">
+              <thead className="sticky top-0 bg-brand-50 text-xs uppercase tracking-widest text-brand-400">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium">OV / REF</th>
+                  <th className="text-left px-4 py-3 font-medium">Cliente</th>
+                  <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Entrega</th>
+                  <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Producto</th>
+                  <th className="text-left px-4 py-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-brand-50">
+                {ovs.map((ov) => (
+                  <tr key={ov.id} className="hover:bg-brand-50/40 transition-colors">
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">
+                        {ov.ov_ref}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-brand-900">{ov.cliente}</div>
+                      {ov.cedi && <div className="text-xs text-brand-400">{ov.cedi}</div>}
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-600">
+                      <div>{ov.fecha_entrega}</div>
+                      <div className="text-brand-400">{ov.lugar_entrega}</div>
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-500">
+                      {ov.producto?.nombre ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_CLASSES[ov.status]}`}>
+                        {STATUS_LABELS[ov.status]}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function isCompletado(v: Viaje): boolean {
+  const ovs = v.ordenes_venta ?? [];
+  return ovs.length > 0 && ovs.every((o) => o.status === "ENTREGADO");
+}
+
 export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
   const router = useRouter();
   const [viajes, setViajes] = useState(initialViajes);
   const [modalViajeId, setModalViajeId] = useState<string | null>(null);
+  const [ovsModalViaje, setOvsModalViaje] = useState<Viaje | null>(null);
+  const [tab, setTab] = useState<"activos" | "completados">("activos");
 
   const [fOvRef, setFOvRef] = useState("");
   const [fFlete, setFFlete] = useState("");
   const [fFecha, setFFecha] = useState("");
   const [fOrigen, setFOrigen] = useState("");
   const [fCliente, setFCliente] = useState("");
+  const [fTermografo, setFTermografo] = useState("");
+  const [fResponsable, setFResponsable] = useState("");
 
-  const fletes = useMemo(() => unique(viajes.map((v) => v.flete_cargo)), [viajes]);
-  const origenes = useMemo(() => unique(viajes.map((v) => v.lugar_inicio)), [viajes]);
-  const clientesOpts = useMemo(
-    () => unique(viajes.flatMap((v) => (v.ordenes_venta ?? []).map((o) => o.cliente))),
-    [viajes]
+  const tabViajes = useMemo(
+    () => viajes.filter((v) => tab === "completados" ? isCompletado(v) : !isCompletado(v)),
+    [viajes, tab]
   );
 
-  const anyFilter = fOvRef || fFlete || fFecha || fOrigen || fCliente;
+  const completadosCount = useMemo(() => viajes.filter(isCompletado).length, [viajes]);
+  const activosCount = viajes.length - completadosCount;
+
+  const fletes = useMemo(() => unique(tabViajes.map((v) => v.flete_cargo)), [tabViajes]);
+  const origenes = useMemo(() => unique(tabViajes.map((v) => v.lugar_inicio)), [tabViajes]);
+  const clientesOpts = useMemo(
+    () => unique(tabViajes.flatMap((v) => (v.ordenes_venta ?? []).map((o) => o.cliente))),
+    [tabViajes]
+  );
+  const responsablesOpts = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const v of tabViajes) {
+      if (v.responsable_id && v.responsable) {
+        const label = v.responsable.nombre ?? v.responsable.email ?? v.responsable_id;
+        map.set(v.responsable_id, label);
+      }
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([value, label]) => ({ value, label }));
+  }, [tabViajes]);
+
+  const anyFilter = fOvRef || fFlete || fFecha || fOrigen || fCliente || fTermografo || fResponsable;
 
   function clearFilters() {
     setFOvRef("");
@@ -170,14 +280,18 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
     setFFecha("");
     setFOrigen("");
     setFCliente("");
+    setFTermografo("");
+    setFResponsable("");
   }
 
   const filtered = useMemo(() => {
     const ovLower = fOvRef.toLowerCase();
-    return viajes.filter((v) => {
+    return tabViajes.filter((v) => {
       if (fFlete && v.flete_cargo !== fFlete) return false;
       if (fFecha && v.fecha_inicio !== fFecha) return false;
       if (fOrigen && v.lugar_inicio !== fOrigen) return false;
+      if (fTermografo && !v.termografo_id?.toLowerCase().includes(fTermografo.toLowerCase())) return false;
+      if (fResponsable && v.responsable_id !== fResponsable) return false;
       if (fOvRef) {
         const match = v.ordenes_venta?.some((o) =>
           o.ov_ref?.toLowerCase().includes(ovLower)
@@ -190,7 +304,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       }
       return true;
     });
-  }, [viajes, fOvRef, fFlete, fFecha, fOrigen, fCliente]);
+  }, [tabViajes, fOvRef, fFlete, fFecha, fOrigen, fCliente, fTermografo, fResponsable]);
 
   const handleTermografoAssigned = useCallback(
     (viajeId: string, termografoId: string) => {
@@ -212,7 +326,40 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
         />
       )}
 
+      {ovsModalViaje && (
+        <OVsModal viaje={ovsModalViaje} onClose={() => setOvsModalViaje(null)} />
+      )}
+
       <div className="space-y-3">
+        <div className="flex gap-1 border-b border-brand-100">
+          <button
+            onClick={() => { setTab("activos"); clearFilters(); }}
+            className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition ${
+              tab === "activos"
+                ? "bg-brand-900 text-white"
+                : "text-brand-500 hover:text-brand-800 hover:bg-brand-50"
+            }`}
+          >
+            Activos
+            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${tab === "activos" ? "bg-white/20 text-white" : "bg-brand-100 text-brand-600"}`}>
+              {activosCount}
+            </span>
+          </button>
+          <button
+            onClick={() => { setTab("completados"); clearFilters(); }}
+            className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition ${
+              tab === "completados"
+                ? "bg-emerald-600 text-white"
+                : "text-brand-500 hover:text-brand-800 hover:bg-brand-50"
+            }`}
+          >
+            Completados
+            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${tab === "completados" ? "bg-white/20 text-white" : "bg-brand-100 text-brand-600"}`}>
+              {completadosCount}
+            </span>
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <FilterSelect
             label="Origen"
@@ -231,6 +378,23 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
             value={fCliente}
             onChange={setFCliente}
             options={clientesOpts.map((v) => ({ value: v, label: v }))}
+          />
+          <input
+            type="text"
+            value={fTermografo}
+            onChange={(e) => setFTermografo(e.target.value)}
+            placeholder="Buscar termógrafo…"
+            className={`rounded-lg border px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 transition w-40 ${
+              fTermografo
+                ? "border-brand-400 text-brand-900 font-medium"
+                : "border-brand-200 text-brand-400"
+            }`}
+          />
+          <FilterSelect
+            label="Responsable de carga"
+            value={fResponsable}
+            onChange={setFResponsable}
+            options={responsablesOpts}
           />
           <input
             type="date"
@@ -363,8 +527,11 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                             max={firstProducto?.temp_max}
                           />
                         </td>
-                        <td className="px-4 py-3 hidden sm:table-cell">
-                          <span className="text-xs font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
+                        <td
+                          className="px-4 py-3 hidden sm:table-cell"
+                          onClick={(e) => { e.stopPropagation(); if (ovCount > 0) setOvsModalViaje(v); }}
+                        >
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full transition ${ovCount > 0 ? "text-brand-700 bg-brand-50 hover:bg-brand-200 cursor-pointer" : "text-brand-300 bg-brand-50"}`}>
                             {ovCount} OV{ovCount !== 1 ? "s" : ""}
                           </span>
                         </td>
@@ -381,11 +548,11 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
               {anyFilter ? (
                 <>
                   <span className="text-brand-700 font-medium">{filtered.length}</span> de{" "}
-                  {viajes.length} viaje{viajes.length !== 1 ? "s" : ""}
+                  {tabViajes.length} viaje{tabViajes.length !== 1 ? "s" : ""}
                 </>
               ) : (
                 <>
-                  {viajes.length} viaje{viajes.length !== 1 ? "s" : ""}
+                  {tabViajes.length} viaje{tabViajes.length !== 1 ? "s" : ""}
                 </>
               )}
             </div>

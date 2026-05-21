@@ -3,7 +3,6 @@ export type Status =
   | "EN_PREPARACION"
   | "TRANSITO"
   | "ENTREGADO"
-  | "RECIBIDO"
   | "RECHAZO_CALIDAD";
 
 export const STATUS_VALUES: Status[] = [
@@ -11,7 +10,6 @@ export const STATUS_VALUES: Status[] = [
   "EN_PREPARACION",
   "TRANSITO",
   "ENTREGADO",
-  "RECIBIDO",
   "RECHAZO_CALIDAD"
 ];
 
@@ -20,7 +18,6 @@ export const STATUS_LABELS: Record<Status, string> = {
   EN_PREPARACION: "En preparación",
   TRANSITO: "En tránsito",
   ENTREGADO: "Entregado",
-  RECIBIDO: "Recibido",
   RECHAZO_CALIDAD: "Rechazo calidad"
 };
 
@@ -29,7 +26,6 @@ export const STATUS_CLASSES: Record<Status, string> = {
   EN_PREPARACION: "bg-blue-100 text-blue-800",
   TRANSITO: "bg-amber-100 text-amber-800",
   ENTREGADO: "bg-emerald-100 text-emerald-800",
-  RECIBIDO: "bg-emerald-200 text-emerald-900",
   RECHAZO_CALIDAD: "bg-red-100 text-red-800"
 };
 
