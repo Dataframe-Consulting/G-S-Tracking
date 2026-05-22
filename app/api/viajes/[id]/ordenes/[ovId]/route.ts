@@ -37,7 +37,7 @@ export async function PATCH(
     .update(update)
     .eq("id", params.ovId)
     .eq("viaje_id", params.id)
-    .select(`*, producto:productos(id, nombre, temp_min, temp_max)`)
+    .select(`*, producto:productos(id, nombre, temp_min, temp_max), combo:producto_combinaciones!producto_combinacion_id(id, temp_min, temp_max, producto_a:productos!producto_a_id(id,nombre), producto_b:productos!producto_b_id(id,nombre))`)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

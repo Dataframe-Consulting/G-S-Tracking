@@ -29,6 +29,8 @@ export function CatalogoClient({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
 
   const primaryField = fields.find((f) => f.primary) ?? fields[0];
   const secondaryFields = fields.filter((f) => f.key !== primaryField.key);
@@ -66,6 +68,38 @@ export function CatalogoClient({
       )
     );
     resetForm();
+  }
+
+  function startEdit(row: Row) {
+    const id = String(row.id);
+    setEditId(id);
+    const ef: Record<string, string> = {};
+    for (const f of fields) ef[f.key] = String(row[f.key] ?? "");
+    setEditForm(ef);
+  }
+
+  async function saveEdit(id: string) {
+    for (const f of fields) {
+      if (f.required !== false && !editForm[f.key]?.trim()) {
+        toast.error(`${f.label} es requerido`);
+        return;
+      }
+    }
+    const body: Record<string, string | number | null> = {};
+    for (const f of fields) {
+      const val = editForm[f.key]?.trim() ?? "";
+      body[f.key] = f.type === "number" ? (val ? Number(val) : null) : (val || null);
+    }
+    const res = await fetch(`${endpoint}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok) { toast.error(json.error || "Error al guardar"); return; }
+    toast.success("Actualizado");
+    setRows((r) => r.map((x) => (String(x.id) === id ? (json.data as Row) : x)));
+    setEditId(null);
   }
 
   async function remove(id: string) {
@@ -136,33 +170,61 @@ export function CatalogoClient({
         </div>
       ) : (
         <ul className="divide-y divide-brand-50">
-          {rows.map((row) => (
-            <li key={String(row.id)} className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-brand-50/40 transition-colors">
-              <div className="min-w-0 flex-1">
-                <div className={`text-sm font-semibold text-brand-900 ${primaryField.mono ? "font-mono" : ""}`}>
-                  {String(row[primaryField.key] ?? "—")}
-                </div>
-                {secondaryFields.map((f) => {
-                  const val = row[f.key];
-                  if (!val) return null;
-                  return (
-                    <div key={f.key} className={`text-xs text-brand-400 mt-0.5 ${f.mono ? "font-mono" : ""}`}>
-                      {f.type === "number"
-                        ? `${f.label}: ${val}`
-                        : String(val)}
+          {rows.map((row) => {
+            const id = String(row.id);
+            const isEditing = editId === id;
+            return (
+              <li key={id} className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-brand-50/40 transition-colors">
+                {isEditing ? (
+                  <div className="flex flex-1 items-center gap-2 flex-wrap">
+                    {fields.map((f) => (
+                      <input
+                        key={f.key}
+                        type={f.type ?? "text"}
+                        value={editForm[f.key] ?? ""}
+                        onChange={(e) => setEditForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                        onKeyDown={(e) => e.key === "Enter" && saveEdit(id)}
+                        placeholder={f.placeholder ?? f.label}
+                        className={`rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 ${f.mono ? "font-mono" : ""} ${fields.length === 1 ? "flex-1" : "w-44"}`}
+                        step={f.type === "number" ? "0.1" : undefined}
+                      />
+                    ))}
+                    <button onClick={() => saveEdit(id)} className="text-xs font-semibold text-brand-700 hover:text-brand-900 transition shrink-0">Guardar</button>
+                    <button onClick={() => setEditId(null)} className="text-xs text-brand-400 hover:text-brand-600 transition shrink-0">Cancelar</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-sm font-semibold text-brand-900 ${primaryField.mono ? "font-mono" : ""}`}>
+                        {String(row[primaryField.key] ?? "—")}
+                      </div>
+                      {secondaryFields.map((f) => {
+                        const val = row[f.key];
+                        if (!val) return null;
+                        return (
+                          <div key={f.key} className={`text-xs text-brand-400 mt-0.5 ${f.mono ? "font-mono" : ""}`}>
+                            {f.type === "number" ? `${f.label}: ${val}` : String(val)}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-              <button
-                onClick={() => remove(String(row.id))}
-                disabled={deleting === String(row.id)}
-                className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 transition shrink-0"
-              >
-                {deleting === String(row.id) ? "…" : "Eliminar"}
-              </button>
-            </li>
-          ))}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button onClick={() => startEdit(row)} className="text-xs text-brand-400 hover:text-brand-700 hover:underline transition">
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => remove(id)}
+                        disabled={deleting === id}
+                        className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 transition"
+                      >
+                        {deleting === id ? "…" : "Eliminar"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

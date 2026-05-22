@@ -22,6 +22,7 @@ import { TempGauge } from "@/components/Temperatura/TempGauge";
 import { TempChart } from "@/components/Temperatura/TempChart";
 import { AlertaBanner } from "@/components/Alertas/AlertaBanner";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
 
 const MapaTracker = dynamic(() => import("@/components/Mapa/MapaTracker"), { ssr: false });
 
@@ -158,6 +159,7 @@ function OVFormPanel({
   productos,
   combinaciones,
   clientes,
+  lugaresCarga,
   onSaved,
   onCancel,
 }: {
@@ -166,6 +168,7 @@ function OVFormPanel({
   productos: Producto[];
   combinaciones: ProductoCombinacion[];
   clientes: ClienteConCedis[];
+  lugaresCarga: { id: string; nombre: string }[];
   onSaved: (ov: OrdenVenta) => void;
   onCancel: () => void;
 }) {
@@ -189,6 +192,10 @@ function OVFormPanel({
       : emptyOVForm(today)
   );
   const [saving, setSaving] = useState(false);
+  const [lugarLibre, setLugarLibre] = useState<boolean>(() => {
+    if (!editingOV || lugaresCarga.length === 0) return false;
+    return !lugaresCarga.some((l) => l.nombre === editingOV.lugar_carga);
+  });
 
   function upd<K extends keyof OVFormData>(key: K, val: OVFormData[K]) {
     setForm((f) => ({ ...f, [key]: val }));
@@ -332,17 +339,55 @@ function OVFormPanel({
             className={`${fieldCls} mt-1`}
           />
         </label>
-        <label className="block text-xs font-medium text-brand-700">
+        <div className="block text-xs font-medium text-brand-700">
           Lugar de carga *
-          <input
-            type="text"
-            required
-            placeholder="Hermosillo"
-            value={form.lugar_carga}
-            onChange={(e) => upd("lugar_carga", e.target.value)}
-            className={`${fieldCls} mt-1`}
-          />
-        </label>
+          {lugaresCarga.length > 0 ? (
+            <div className="mt-1 space-y-1.5">
+              <select
+                required={!lugarLibre}
+                value={lugarLibre ? "__otro__" : form.lugar_carga}
+                onChange={(e) => {
+                  if (e.target.value === "__otro__") {
+                    setLugarLibre(true);
+                    upd("lugar_carga", "");
+                  } else {
+                    setLugarLibre(false);
+                    upd("lugar_carga", e.target.value);
+                  }
+                }}
+                className={`${fieldCls} bg-white`}
+              >
+                <option value="">— Selecciona lugar —</option>
+                {lugaresCarga.map((l) => (
+                  <option key={l.id} value={l.nombre}>
+                    {l.nombre}
+                  </option>
+                ))}
+                <option value="__otro__">Otro (texto libre)…</option>
+              </select>
+              {lugarLibre && (
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="Escribe el lugar de carga"
+                  value={form.lugar_carga}
+                  onChange={(e) => upd("lugar_carga", e.target.value)}
+                  className={fieldCls}
+                />
+              )}
+            </div>
+          ) : (
+            <input
+              type="text"
+              required
+              placeholder="Hermosillo"
+              value={form.lugar_carga}
+              onChange={(e) => upd("lugar_carga", e.target.value)}
+              className={`${fieldCls} mt-1`}
+            />
+          )}
+        </div>
         <label className="block text-xs font-medium text-brand-700">
           Cita
           <input
@@ -858,7 +903,7 @@ function OVDetailModal({
                     Entrega{ov.cita ? ` · Cita: ${ov.cita}` : ""}
                   </div>
                   <div className="text-sm font-medium text-brand-900">{ov.fecha_entrega}</div>
-                  <div className="text-xs text-brand-500 mt-0.5">{ov.lugar_entrega}</div>
+                  {ov.cedi && <div className="text-xs text-brand-500 mt-0.5">{ov.cedi}</div>}
                 </div>
               </div>
 
@@ -1043,11 +1088,13 @@ export function ViajeDetail({
 
   // OV form
   const [showOVForm, setShowOVForm] = useState(false);
+  const [editingOVPanel, setEditingOVPanel] = useState<OrdenVenta | null>(null);
   const [detailOV, setDetailOV] = useState<OrdenVenta | null>(null);
   const [detailOVEdit, setDetailOVEdit] = useState(false);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [combinaciones, setCombinaciones] = useState<ProductoCombinacion[]>([]);
   const [clientes, setClientes] = useState<ClienteConCedis[]>([]);
+  const [lugaresOV, setLugaresOV] = useState<{ id: string; nombre: string }[]>([]);
   const [transportistas, setTransportistas] = useState<Transportista[]>([]);
   const [usuarios, setUsuarios] = useState<
     { id: string; nombre: string | null; email: string | null }[]
@@ -1117,6 +1164,12 @@ export function ViajeDetail({
         fetch("/api/clientes")
           .then((r) => r.json())
           .then((j) => setClientes(j.data ?? []))
+      );
+    if (lugaresOV.length === 0)
+      fetches.push(
+        fetch("/api/lugares")
+          .then((r) => r.json())
+          .then((j) => setLugaresOV(j.data ?? []))
       );
     await Promise.all(fetches);
   }
@@ -1198,6 +1251,7 @@ export function ViajeDetail({
       return [...prev, ov];
     });
     setShowOVForm(false);
+    setEditingOVPanel(null);
     router.refresh();
   }
 
@@ -1268,7 +1322,7 @@ export function ViajeDetail({
     };
   }, [viaje.id, router]);
 
-  const showOVFormPanel = showOVForm;
+  const showOVFormPanel = showOVForm || editingOVPanel !== null;
 
   return (
     <div className="space-y-6">
@@ -1392,13 +1446,18 @@ export function ViajeDetail({
         <div className="space-y-3">
           {showOVFormPanel && (
             <OVFormPanel
+              key={editingOVPanel?.id ?? "new"}
               viaje_id={viaje.id}
-              editingOV={null}
+              editingOV={editingOVPanel}
               productos={productos}
               combinaciones={combinaciones}
               clientes={clientes}
+              lugaresCarga={lugaresOV}
               onSaved={handleOVSaved}
-              onCancel={() => setShowOVForm(false)}
+              onCancel={() => {
+                setShowOVForm(false);
+                setEditingOVPanel(null);
+              }}
             />
           )}
 
@@ -1461,7 +1520,7 @@ export function ViajeDetail({
                               {ov.fecha_entrega}
                               {ov.cita ? ` · ${ov.cita}` : ""}
                             </div>
-                            <div className="text-brand-400">{ov.lugar_entrega}</div>
+                            {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                           </td>
                           <td className="px-4 py-3 hidden lg:table-cell text-xs text-brand-500">
                             {ov.producto?.nombre ?? "—"}
@@ -1484,7 +1543,11 @@ export function ViajeDetail({
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
-                              onClick={() => openOVDetail(ov, true)}
+                              onClick={async () => {
+                                await loadFormData();
+                                setShowOVForm(false);
+                                setEditingOVPanel(ov);
+                              }}
                               className="text-xs text-brand-500 hover:text-brand-900 transition"
                             >
                               Editar
@@ -1507,11 +1570,11 @@ export function ViajeDetail({
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {editingViaje ? (
             <EditCell label="Lugar de inicio">
-              <input
-                type="text"
+              <CiudadCombobox
                 value={viajeEdit.lugar_inicio}
-                onChange={(e) => setViajeEdit((v) => ({ ...v, lugar_inicio: e.target.value }))}
-                className={bareInput}
+                onChange={(v) => setViajeEdit((prev) => ({ ...prev, lugar_inicio: v }))}
+                placeholder="Hermosillo"
+                inputClassName={bareInput}
               />
             </EditCell>
           ) : (
@@ -1520,11 +1583,11 @@ export function ViajeDetail({
 
           {editingViaje ? (
             <EditCell label="Lugar de fin">
-              <input
-                type="text"
+              <CiudadCombobox
                 value={viajeEdit.lugar_fin}
-                onChange={(e) => setViajeEdit((v) => ({ ...v, lugar_fin: e.target.value }))}
-                className={bareInput}
+                onChange={(v) => setViajeEdit((prev) => ({ ...prev, lugar_fin: v }))}
+                placeholder="Tijuana"
+                inputClassName={bareInput}
               />
             </EditCell>
           ) : (

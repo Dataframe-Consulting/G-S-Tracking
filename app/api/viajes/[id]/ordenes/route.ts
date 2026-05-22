@@ -6,7 +6,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const supabase = createServerSupabase();
   const { data, error } = await supabase
     .from("ordenes_venta")
-    .select(`*, producto:productos(id, nombre, temp_min, temp_max)`)
+    .select(`*, producto:productos(id, nombre, temp_min, temp_max), combo:producto_combinaciones!producto_combinacion_id(id, temp_min, temp_max, producto_a:productos!producto_a_id(id,nombre), producto_b:productos!producto_b_id(id,nombre))`)
     .eq("viaje_id", params.id)
     .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -58,7 +58,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { data, error } = await supabase
     .from("ordenes_venta")
     .insert(payload)
-    .select(`*, producto:productos(id, nombre, temp_min, temp_max)`)
+    .select(`*, producto:productos(id, nombre, temp_min, temp_max), combo:producto_combinaciones!producto_combinacion_id(id, temp_min, temp_max, producto_a:productos!producto_a_id(id,nombre), producto_b:productos!producto_b_id(id,nombre))`)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

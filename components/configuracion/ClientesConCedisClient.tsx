@@ -16,10 +16,14 @@ export function ClientesConCedisClient({
   const [clienteForm, setClienteForm] = useState({ nombre: "", contacto: "" });
   const [savingCliente, setSavingCliente] = useState(false);
   const [deletingCliente, setDeletingCliente] = useState<string | null>(null);
+  const [editClienteId, setEditClienteId] = useState<string | null>(null);
+  const [editClienteForm, setEditClienteForm] = useState({ nombre: "", contacto: "" });
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cediForm, setCediForm] = useState<Record<string, string>>({});
   const [savingCedi, setSavingCedi] = useState<string | null>(null);
   const [deletingCedi, setDeletingCedi] = useState<string | null>(null);
+  const [editCediId, setEditCediId] = useState<string | null>(null);
+  const [editCediForm, setEditCediForm] = useState("");
 
   const inp =
     "rounded-xl border border-brand-200 px-3 py-2.5 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder:text-brand-300 transition w-full";
@@ -49,6 +53,25 @@ export function ClientesConCedisClient({
     );
     setClienteForm({ nombre: "", contacto: "" });
     setShowAddCliente(false);
+  }
+
+  function startEditCliente(c: ClienteConCedis) {
+    setEditClienteId(c.id);
+    setEditClienteForm({ nombre: c.nombre, contacto: c.contacto ?? "" });
+  }
+
+  async function saveEditCliente(id: string) {
+    if (!editClienteForm.nombre.trim()) { toast.error("Nombre requerido"); return; }
+    const res = await fetch(`/api/clientes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: editClienteForm.nombre.trim(), contacto: editClienteForm.contacto.trim() || null }),
+    });
+    const json = await res.json();
+    if (!res.ok) { toast.error(json.error || "Error al guardar"); return; }
+    toast.success("Cliente actualizado");
+    setClientes((prev) => prev.map((c) => c.id === id ? { ...c, ...json.data } : c));
+    setEditClienteId(null);
   }
 
   async function removeCliente(id: string) {
@@ -87,6 +110,31 @@ export function ClientesConCedisClient({
           : c
       )
     );
+  }
+
+  function startEditCedi(cedi: Cedi) {
+    setEditCediId(cedi.id);
+    setEditCediForm(cedi.nombre);
+  }
+
+  async function saveEditCedi(clienteId: string, cediId: string) {
+    if (!editCediForm.trim()) { toast.error("Nombre requerido"); return; }
+    const res = await fetch(`/api/clientes/${clienteId}/cedis/${cediId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: editCediForm.trim() }),
+    });
+    const json = await res.json();
+    if (!res.ok) { toast.error(json.error || "Error al guardar"); return; }
+    toast.success("Cedi actualizado");
+    setClientes((prev) =>
+      prev.map((c) =>
+        c.id === clienteId
+          ? { ...c, cedis: (c.cedis ?? []).map((d) => d.id === cediId ? (json.data as Cedi) : d) }
+          : c
+      )
+    );
+    setEditCediId(null);
   }
 
   async function removeCedi(clienteId: string, cediId: string) {
@@ -176,32 +224,63 @@ export function ClientesConCedisClient({
               <li key={cliente.id}>
                 {/* Fila del cliente */}
                 <div className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-brand-50/40 transition-colors">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-brand-900">{cliente.nombre}</div>
-                    {cliente.contacto && (
-                      <div className="text-xs text-brand-400 mt-0.5">{cliente.contacto}</div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : cliente.id)}
-                      className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-900 transition"
-                    >
-                      <span className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}>▾</span>
-                      <span>
-                        {cedis.length > 0
-                          ? `${cedis.length} cedi${cedis.length !== 1 ? "s" : ""}`
-                          : "Cedis"}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => removeCliente(cliente.id)}
-                      disabled={deletingCliente === cliente.id}
-                      className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 transition"
-                    >
-                      {deletingCliente === cliente.id ? "…" : "Eliminar"}
-                    </button>
-                  </div>
+                  {editClienteId === cliente.id ? (
+                    <div className="flex flex-1 items-center gap-2 flex-wrap">
+                      <input
+                        type="text"
+                        value={editClienteForm.nombre}
+                        onChange={(e) => setEditClienteForm((f) => ({ ...f, nombre: e.target.value }))}
+                        onKeyDown={(e) => e.key === "Enter" && saveEditCliente(cliente.id)}
+                        placeholder="Nombre del cliente"
+                        className="rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 w-44"
+                      />
+                      <input
+                        type="text"
+                        value={editClienteForm.contacto}
+                        onChange={(e) => setEditClienteForm((f) => ({ ...f, contacto: e.target.value }))}
+                        onKeyDown={(e) => e.key === "Enter" && saveEditCliente(cliente.id)}
+                        placeholder="Contacto"
+                        className="rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 w-44"
+                      />
+                      <button onClick={() => saveEditCliente(cliente.id)} className="text-xs font-semibold text-brand-700 hover:text-brand-900 transition shrink-0">Guardar</button>
+                      <button onClick={() => setEditClienteId(null)} className="text-xs text-brand-400 hover:text-brand-600 transition shrink-0">Cancelar</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-brand-900">{cliente.nombre}</div>
+                        {cliente.contacto && (
+                          <div className="text-xs text-brand-400 mt-0.5">{cliente.contacto}</div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : cliente.id)}
+                          className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-900 transition"
+                        >
+                          <span className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}>▾</span>
+                          <span>
+                            {cedis.length > 0
+                              ? `${cedis.length} cedi${cedis.length !== 1 ? "s" : ""}`
+                              : "Cedis"}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => startEditCliente(cliente)}
+                          className="text-xs text-brand-400 hover:text-brand-700 hover:underline transition"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => removeCliente(cliente.id)}
+                          disabled={deletingCliente === cliente.id}
+                          className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 transition"
+                        >
+                          {deletingCliente === cliente.id ? "…" : "Eliminar"}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Panel de cedis */}
@@ -214,14 +293,38 @@ export function ClientesConCedisClient({
                             key={cedi.id}
                             className="flex items-center justify-between gap-2 rounded-lg bg-white border border-brand-100 px-3 py-2"
                           >
-                            <span className="text-sm text-brand-800">{cedi.nombre}</span>
-                            <button
-                              onClick={() => removeCedi(cliente.id, cedi.id)}
-                              disabled={deletingCedi === cedi.id}
-                              className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 transition shrink-0"
-                            >
-                              {deletingCedi === cedi.id ? "…" : "Eliminar"}
-                            </button>
+                            {editCediId === cedi.id ? (
+                              <div className="flex flex-1 items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editCediForm}
+                                  onChange={(e) => setEditCediForm(e.target.value)}
+                                  onKeyDown={(e) => e.key === "Enter" && saveEditCedi(cliente.id, cedi.id)}
+                                  className="flex-1 rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                />
+                                <button onClick={() => saveEditCedi(cliente.id, cedi.id)} className="text-xs font-semibold text-brand-700 hover:text-brand-900 transition shrink-0">Guardar</button>
+                                <button onClick={() => setEditCediId(null)} className="text-xs text-brand-400 hover:text-brand-600 transition shrink-0">Cancelar</button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-sm text-brand-800 flex-1">{cedi.nombre}</span>
+                                <div className="flex items-center gap-3 shrink-0">
+                                  <button
+                                    onClick={() => startEditCedi(cedi)}
+                                    className="text-xs text-brand-400 hover:text-brand-700 hover:underline transition"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={() => removeCedi(cliente.id, cedi.id)}
+                                    disabled={deletingCedi === cedi.id}
+                                    className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 transition"
+                                  >
+                                    {deletingCedi === cedi.id ? "…" : "Eliminar"}
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </li>
                         ))}
                       </ul>

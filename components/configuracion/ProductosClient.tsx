@@ -182,6 +182,8 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
   const [form, setForm]         = useState({ producto_a_id: "", producto_b_id: "", temp_min: "", temp_max: "" });
   const [saving, setSaving]     = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editId, setEditId]     = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ temp_min: "", temp_max: "" });
 
   async function add() {
     if (!form.producto_a_id || !form.producto_b_id) { toast.error("Selecciona ambos productos"); return; }
@@ -201,6 +203,25 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
     setCombos((c) => [...c, json.data as Combinacion]);
     setForm({ producto_a_id: "", producto_b_id: "", temp_min: "", temp_max: "" });
     setAddOpen(false);
+  }
+
+  function startEdit(c: Combinacion) {
+    setEditId(c.id);
+    setEditForm({ temp_min: String(c.temp_min), temp_max: String(c.temp_max) });
+  }
+
+  async function saveEdit(id: string) {
+    if (Number(editForm.temp_min) >= Number(editForm.temp_max)) { toast.error("Temp mínima debe ser menor a la máxima"); return; }
+    const res = await fetch(`/api/producto-combinaciones/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ temp_min: Number(editForm.temp_min), temp_max: Number(editForm.temp_max) }),
+    });
+    const json = await res.json();
+    if (!res.ok) { toast.error(json.error || "Error al guardar"); return; }
+    toast.success("Actualizado");
+    setCombos((c) => c.map((x) => (x.id === id ? (json.data as Combinacion) : x)));
+    setEditId(null);
   }
 
   async function remove(id: string) {
@@ -277,13 +298,41 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
                 <span className="mx-2 text-brand-300">+</span>
                 {c.producto_b.nombre}
               </div>
-              <span className="text-sm text-brand-500 tabular-nums shrink-0">
-                {c.temp_min}° — {c.temp_max}°C
-              </span>
-              <button onClick={() => remove(c.id)} disabled={deleting === c.id}
-                className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 transition shrink-0">
-                {deleting === c.id ? "…" : "Eliminar"}
-              </button>
+
+              {editId === c.id ? (
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-brand-600 font-medium">
+                    Min °C
+                    <input type="number" step="0.1" value={editForm.temp_min}
+                      onChange={(e) => setEditForm((s) => ({ ...s, temp_min: e.target.value }))}
+                      className="w-20 rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-brand-600 font-medium">
+                    Max °C
+                    <input type="number" step="0.1" value={editForm.temp_max}
+                      onChange={(e) => setEditForm((s) => ({ ...s, temp_max: e.target.value }))}
+                      className="w-20 rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  </label>
+                  <button onClick={() => saveEdit(c.id)}
+                    className="text-xs font-semibold text-brand-700 hover:text-brand-900 transition">Guardar</button>
+                  <button onClick={() => setEditId(null)}
+                    className="text-xs text-brand-400 hover:text-brand-600 transition">Cancelar</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-brand-500 tabular-nums shrink-0">
+                    {c.temp_min}° — {c.temp_max}°C
+                  </span>
+                  <button onClick={() => startEdit(c)}
+                    className="text-xs text-brand-400 hover:text-brand-700 hover:underline transition shrink-0">
+                    Editar
+                  </button>
+                  <button onClick={() => remove(c.id)} disabled={deleting === c.id}
+                    className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 transition shrink-0">
+                    {deleting === c.id ? "…" : "Eliminar"}
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>

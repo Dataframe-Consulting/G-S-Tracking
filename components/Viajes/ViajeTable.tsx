@@ -203,11 +203,15 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                       {ov.cedi && <div className="text-xs text-brand-400">{ov.cedi}</div>}
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-600">
-                      <div>{ov.fecha_entrega}</div>
-                      <div className="text-brand-400">{ov.lugar_entrega}</div>
+                      <div>{ov.fecha_entrega ?? "—"}</div>
+                      {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-500">
-                      {ov.producto?.nombre ?? "—"}
+                      {ov.producto
+                        ? ov.producto.nombre
+                        : ov.combo
+                          ? `${ov.combo.producto_a.nombre} + ${ov.combo.producto_b.nombre}`
+                          : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_CLASSES[ov.status]}`}>
@@ -236,6 +240,26 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
   const [modalViajeId, setModalViajeId] = useState<string | null>(null);
   const [ovsModalViaje, setOvsModalViaje] = useState<Viaje | null>(null);
   const [tab, setTab] = useState<"activos" | "completados">("activos");
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadExcel() {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/viajes/reporte");
+      if (!res.ok) { toast.error("Error al generar el reporte"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? "viajes.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const [fOvRef, setFOvRef] = useState("");
   const [fFlete, setFFlete] = useState("");
@@ -361,6 +385,18 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={downloadExcel}
+            disabled={downloading}
+            className="rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 hover:border-brand-400 transition flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            {downloading ? "Descargando…" : "Descargar Excel"}
+          </button>
           <FilterSelect
             label="Origen"
             value={fOrigen}

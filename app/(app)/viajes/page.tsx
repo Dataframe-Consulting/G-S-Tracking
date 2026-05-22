@@ -12,7 +12,7 @@ export default async function ViajesPage() {
     .select(`
       *,
       responsable:user_profiles!responsable_id(id, nombre, email),
-      ordenes_venta ( id, ov_ref, cliente, status, producto_id, producto:productos(id, nombre, temp_min, temp_max) )
+      ordenes_venta ( id, ov_ref, cliente, cedi, status, fecha_entrega, producto_id, producto_combinacion_id, producto:productos(id, nombre, temp_min, temp_max), combo:producto_combinaciones!producto_combinacion_id(id, temp_min, temp_max, producto_a:productos!producto_a_id(id,nombre), producto_b:productos!producto_b_id(id,nombre)) )
     `)
     .order("numero", { ascending: false })
     .limit(200);
