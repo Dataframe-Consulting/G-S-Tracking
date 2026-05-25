@@ -8,7 +8,11 @@
       "Bash(npx tsc *)",
       "Bash(node_modules/.bin/next build *)",
       "Bash(git push *)",
-      "Bash(node_modules/.bin/tsc --noEmit)"
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(dir /s \"C:\\\\Users\\\\Diego\\\\Desktop\\\\Dataframe AI\\\\G&S\\\\G-S-Tracking\")",
+      "Bash(Get-ChildItem *)",
+      "Bash(ls -la \"app/\\(app\\)/viajes/\")",
+      "Bash(ls -la app/*/viajes/)"
     ]
   }
 }

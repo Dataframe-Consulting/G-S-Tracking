@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
@@ -13,6 +13,7 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const emailFocused = useRef(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,9 +36,12 @@ export function LoginForm() {
         <span className="text-sm font-medium text-slate-700">Correo</span>
         <input
           type="email"
+          name="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onFocus={() => { emailFocused.current = true; }}
+          onBlur={() => { emailFocused.current = false; }}
+          onChange={(e) => { if (emailFocused.current) setEmail(e.target.value); }}
           className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           autoComplete="email"
         />
@@ -46,6 +50,7 @@ export function LoginForm() {
         <span className="text-sm font-medium text-slate-700">Contraseña</span>
         <input
           type="password"
+          name="password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}

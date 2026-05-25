@@ -4,9 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { Transportista } from "@/lib/types";
+import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
 
 const field =
   "mt-1 w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder:text-brand-300 transition";
+const fieldInput =
+  "w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder:text-brand-300 transition";
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -82,24 +85,24 @@ export function ViajeForm({
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <label className="block text-sm font-medium text-brand-700 lg:col-span-2">
           Lugar de inicio (origen)
-          <input
-            type="text"
-            required
-            placeholder="Hermosillo"
+          <CiudadCombobox
             value={form.lugar_inicio}
-            onChange={(e) => update("lugar_inicio", e.target.value)}
-            className={field}
+            onChange={(v) => update("lugar_inicio", v)}
+            placeholder="Hermosillo"
+            required
+            className="mt-1"
+            inputClassName={fieldInput}
           />
         </label>
         <label className="block text-sm font-medium text-brand-700 lg:col-span-2">
           Lugar de fin (destino)
-          <input
-            type="text"
-            required
-            placeholder="Tijuana"
+          <CiudadCombobox
             value={form.lugar_fin}
-            onChange={(e) => update("lugar_fin", e.target.value)}
-            className={field}
+            onChange={(v) => update("lugar_fin", v)}
+            placeholder="Tijuana"
+            required
+            className="mt-1"
+            inputClassName={fieldInput}
           />
         </label>
         <label className="block text-sm font-medium text-brand-700">

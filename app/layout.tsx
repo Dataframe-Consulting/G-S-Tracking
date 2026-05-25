@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${syne.variable} ${dmSans.variable}`}>
-      <body>
+      <body suppressHydrationWarning>
         {children}
         <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
       </body>
