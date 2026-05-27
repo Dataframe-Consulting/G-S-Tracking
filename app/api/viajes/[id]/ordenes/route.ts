@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { STATUS_VALUES } from "@/lib/types";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
@@ -61,5 +62,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  const prod = data.producto?.nombre
+    ? data.producto.nombre
+    : data.combo
+      ? `${data.combo.producto_a?.nombre ?? "?"} + ${data.combo.producto_b?.nombre ?? "?"}`
+      : null;
+  const detalle = prod ? `${data.cliente} - ${prod}` : data.cliente;
+  await logAudit(supabase, {
+    viaje_id: params.id,
+    ov_id: data.id,
+    tipo: "CREACION",
+    descripcion: `Creó OV ${data.ov_ref} (${detalle})`,
+  });
+
   return NextResponse.json({ data }, { status: 201 });
 }

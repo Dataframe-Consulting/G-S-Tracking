@@ -1,6 +1,36 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { defineTrip, closeTrip } from "@/lib/copeland";
+import { logAuditMany } from "@/lib/audit";
+
+const VIAJE_FIELD_LABELS: Record<string, string> = {
+  lugar_inicio: "lugar de inicio",
+  lugar_fin: "lugar de fin",
+  fecha_inicio: "fecha de inicio",
+  fecha_fin: "fecha de fin",
+  flete_cargo: "transportista",
+  responsable_id: "responsable",
+  termografo_id: "termógrafo",
+};
+
+function fmt(value: unknown): string {
+  if (value == null || value === "") return "(vacío)";
+  return String(value);
+}
+
+async function resolveResponsable(
+  supabase: SupabaseClient,
+  id: string | null | undefined
+): Promise<string | null> {
+  if (!id) return null;
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("nombre, email")
+    .eq("user_id", id)
+    .maybeSingle();
+  return data?.nombre ?? data?.email ?? id;
+}
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
@@ -19,7 +49,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: prev } = await supabase
     .from("viajes")
-    .select("termografo_id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin, numero")
+    .select(
+      "termografo_id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin, flete_cargo, responsable_id, numero"
+    )
     .eq("id", params.id)
     .single();
 
@@ -81,6 +113,29 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         scheduledEndUTC: fechaFin ? `${fechaFin}T23:59:59` : null,
       }).catch((e) => console.error("DefineTrip error:", e));
     }
+  }
+
+  // Auditoría: una entrada por campo que realmente cambió
+  if (prev) {
+    const descripciones: string[] = [];
+    for (const campo of Object.keys(VIAJE_FIELD_LABELS)) {
+      if (!(campo in body)) continue;
+      const antes = (prev as Record<string, unknown>)[campo] ?? null;
+      const despues = (data as Record<string, unknown>)[campo] ?? null;
+      if (antes === despues) continue;
+
+      const label = VIAJE_FIELD_LABELS[campo];
+      if (campo === "responsable_id") {
+        const [nombreAntes, nombreDespues] = await Promise.all([
+          resolveResponsable(supabase, antes as string | null),
+          resolveResponsable(supabase, despues as string | null),
+        ]);
+        descripciones.push(`Cambió ${label} de ${fmt(nombreAntes)} a ${fmt(nombreDespues)}`);
+      } else {
+        descripciones.push(`Cambió ${label} de ${fmt(antes)} a ${fmt(despues)}`);
+      }
+    }
+    await logAuditMany(supabase, { viaje_id: params.id, tipo: "MODIFICACION" }, descripciones);
   }
 
   return NextResponse.json({ data });

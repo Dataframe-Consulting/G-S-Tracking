@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
-import type { AlertaLog, LecturaTemperatura, OrdenVenta, Termografo, Viaje } from "@/lib/types";
+import type { AlertaLog, Auditoria, LecturaTemperatura, Termografo, Viaje } from "@/lib/types";
 import { ViajeDetail } from "@/components/Viajes/ViajeDetail";
 
 export const dynamic = "force-dynamic";
@@ -17,25 +17,32 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
 
   if (!viaje) notFound();
 
-  const [{ data: lecturas }, { data: alertas }, { data: termografos }] = await Promise.all([
-    supabase
-      .from("lecturas_temperatura")
-      .select("*")
-      .eq("viaje_id", params.id)
-      .order("timestamp", { ascending: false })
-      .limit(150),
-    supabase
-      .from("alertas_log")
-      .select("*")
-      .eq("viaje_id", params.id)
-      .order("created_at", { ascending: false })
-      .limit(20),
-    supabase
-      .from("termografos")
-      .select("*")
-      .eq("viaje_id", params.id)
-      .eq("asignado", true),
-  ]);
+  const [{ data: lecturas }, { data: alertas }, { data: termografos }, { data: auditoria }] =
+    await Promise.all([
+      supabase
+        .from("lecturas_temperatura")
+        .select("*")
+        .eq("viaje_id", params.id)
+        .order("timestamp", { ascending: false })
+        .limit(150),
+      supabase
+        .from("alertas_log")
+        .select("*")
+        .eq("viaje_id", params.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("termografos")
+        .select("*")
+        .eq("viaje_id", params.id)
+        .eq("asignado", true),
+      supabase
+        .from("auditoria")
+        .select("*")
+        .eq("viaje_id", params.id)
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ]);
 
   return (
     <div className="space-y-4">
@@ -47,6 +54,7 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
         lecturas={(lecturas ?? []) as LecturaTemperatura[]}
         alertas={(alertas ?? []) as AlertaLog[]}
         termografos={(termografos ?? []) as Termografo[]}
+        auditoria={(auditoria ?? []) as Auditoria[]}
       />
     </div>
   );
