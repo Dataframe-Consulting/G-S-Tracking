@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import * as XLSX from "xlsx";
 import type { Viaje, OrdenVenta } from "@/lib/types";
+import { to12h } from "@/lib/time";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDIENTE: "Pendiente",
@@ -59,7 +60,7 @@ export async function GET() {
         "Lugar Carga": ov.lugar_carga,
         "Fecha Entrega": ov.fecha_entrega,
         "Lugar Entrega": ov.lugar_entrega,
-        "Cita": ov.cita ?? null,
+        "Cita": to12h(ov.cita) ?? null,
         "Status": STATUS_LABELS[ov.status] ?? ov.status,
         "Instrucciones": ov.instrucciones ?? null,
         "Producto": producto,

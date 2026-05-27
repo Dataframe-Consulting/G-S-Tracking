@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import type { LecturaTemperatura } from "@/lib/types";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { cToF } from "@/lib/temperature";
 
 export function TempChart({
   lecturas,
@@ -30,6 +31,9 @@ export function TempChart({
   const [fullLecturas, setFullLecturas] = useState<LecturaTemperatura[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const minF = cToF(min) as number;
+  const maxF = cToF(max) as number;
+
   const data = [...lecturas]
     .reverse()
     .map((l) => ({
@@ -37,7 +41,7 @@ export function TempChart({
         hour: "2-digit",
         minute: "2-digit",
       }),
-      temp: Number(l.temperatura),
+      temp: cToF(Number(l.temperatura)) ?? 0,
     }));
 
   async function openDetalle() {
@@ -61,7 +65,7 @@ export function TempChart({
       hour: "2-digit",
       minute: "2-digit",
     }),
-    temp: Number(l.temperatura),
+    temp: cToF(Number(l.temperatura)) ?? 0,
   }));
 
   const outOfRange = fullLecturas.filter((l) => l.fuera_rango).length;
@@ -116,7 +120,7 @@ export function TempChart({
             />
 
             <Tooltip
-              formatter={(v: number) => [`${v.toFixed(1)}°C`, "Temp"]}
+              formatter={(v: number) => [`${v.toFixed(1)}°F`, "Temp"]}
               contentStyle={{
                 fontSize: 12,
                 borderRadius: 10,
@@ -128,18 +132,18 @@ export function TempChart({
             />
 
             <ReferenceLine
-              y={max}
+              y={maxF}
               stroke="#dc2626"
               strokeDasharray="4 3"
               strokeWidth={1}
-              label={{ value: `Máx ${max}°`, position: "insideTopRight", fontSize: 9, fill: "#dc2626", dy: -4 }}
+              label={{ value: `Máx ${maxF.toFixed(0)}°`, position: "insideTopRight", fontSize: 9, fill: "#dc2626", dy: -4 }}
             />
             <ReferenceLine
-              y={min}
+              y={minF}
               stroke="#2563eb"
               strokeDasharray="4 3"
               strokeWidth={1}
-              label={{ value: `Mín ${min}°`, position: "insideBottomRight", fontSize: 9, fill: "#2563eb", dy: 4 }}
+              label={{ value: `Mín ${minF.toFixed(0)}°`, position: "insideBottomRight", fontSize: 9, fill: "#2563eb", dy: 4 }}
             />
 
             <Area
@@ -247,7 +251,7 @@ export function TempChart({
                         />
 
                         <Tooltip
-                          formatter={(v: number) => [`${v.toFixed(1)}°C`, "Temp"]}
+                          formatter={(v: number) => [`${v.toFixed(1)}°F`, "Temp"]}
                           contentStyle={{
                             fontSize: 12,
                             borderRadius: 10,
@@ -259,18 +263,18 @@ export function TempChart({
                         />
 
                         <ReferenceLine
-                          y={max}
+                          y={maxF}
                           stroke="#dc2626"
                           strokeDasharray="4 3"
                           strokeWidth={1}
-                          label={{ value: `Máx ${max}°`, position: "insideTopRight", fontSize: 9, fill: "#dc2626", dy: -4 }}
+                          label={{ value: `Máx ${maxF.toFixed(0)}°`, position: "insideTopRight", fontSize: 9, fill: "#dc2626", dy: -4 }}
                         />
                         <ReferenceLine
-                          y={min}
+                          y={minF}
                           stroke="#2563eb"
                           strokeDasharray="4 3"
                           strokeWidth={1}
-                          label={{ value: `Mín ${min}°`, position: "insideBottomRight", fontSize: 9, fill: "#2563eb", dy: 4 }}
+                          label={{ value: `Mín ${minF.toFixed(0)}°`, position: "insideBottomRight", fontSize: 9, fill: "#2563eb", dy: 4 }}
                         />
 
                         <Area

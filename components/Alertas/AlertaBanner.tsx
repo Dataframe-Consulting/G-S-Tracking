@@ -1,3 +1,5 @@
+import { cToF } from "@/lib/temperature";
+
 export function AlertaBanner({
   active,
   tempActual,
@@ -11,6 +13,10 @@ export function AlertaBanner({
 }) {
   if (!active || tempActual == null) return null;
   const isHigh = tempMax != null && tempActual > Number(tempMax);
+
+  const tempActualF = cToF(tempActual);
+  const tempMinF = cToF(tempMin);
+  const tempMaxF = cToF(tempMax);
 
   return (
     <div
@@ -38,9 +44,9 @@ export function AlertaBanner({
           {isHigh ? "Temperatura fuera de rango — ALTA" : "Temperatura fuera de rango — BAJA"}
         </p>
         <p className={`text-sm mt-0.5 ${isHigh ? "text-red-700" : "text-blue-700"}`}>
-          Lectura actual <strong>{tempActual.toFixed(1)}°C</strong>
-          {tempMin != null && tempMax != null && (
-            <> &middot; Rango permitido {Number(tempMin)}°C – {Number(tempMax)}°C</>
+          Lectura actual <strong>{tempActualF != null ? tempActualF.toFixed(1) : "—"}°F</strong>
+          {tempMinF != null && tempMaxF != null && (
+            <> &middot; Rango permitido {tempMinF.toFixed(1)}°F – {tempMaxF.toFixed(1)}°F</>
           )}
         </p>
       </div>

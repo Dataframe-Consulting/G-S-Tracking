@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { cToF } from "@/lib/temperature";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ export default async function AlertasPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 font-semibold text-brand-900 tabular-nums">
-                      {a.temperatura != null ? `${Number(a.temperatura).toFixed(1)}°C` : "—"}
+                      {a.temperatura != null ? `${(cToF(Number(a.temperatura)) as number).toFixed(1)}°F` : "—"}
                     </td>
                     <td className="px-4 py-3">
                       {a.viaje ? (

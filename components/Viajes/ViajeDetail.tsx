@@ -23,6 +23,8 @@ import { TempChart } from "@/components/Temperatura/TempChart";
 import { AlertaBanner } from "@/components/Alertas/AlertaBanner";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
+import { cToF } from "@/lib/temperature";
+import { to12h } from "@/lib/time";
 
 const MapaTracker = dynamic(() => import("@/components/Mapa/MapaTracker"), { ssr: false });
 
@@ -391,10 +393,10 @@ function OVFormPanel({
         <label className="block text-xs font-medium text-brand-700">
           Cita
           <input
-            type="text"
-            placeholder="6AM"
+            type="time"
             value={form.cita}
             onChange={(e) => upd("cita", e.target.value)}
+            onClick={(e) => e.currentTarget.showPicker?.()}
             className={`${fieldCls} mt-1`}
           />
         </label>
@@ -421,7 +423,7 @@ function OVFormPanel({
               <optgroup label="── Individuales">
                 {productos.map((p) => (
                   <option key={p.id} value={`prod:${p.id}`}>
-                    {p.nombre} ({p.temp_min}° — {p.temp_max}°C)
+                    {p.nombre} ({(cToF(p.temp_min) as number).toFixed(0)}° — {(cToF(p.temp_max) as number).toFixed(0)}°F)
                   </option>
                 ))}
               </optgroup>
@@ -430,7 +432,7 @@ function OVFormPanel({
               <optgroup label="── Combinados">
                 {combinaciones.map((c) => (
                   <option key={c.id} value={`combo:${c.id}`}>
-                    {c.producto_a.nombre} + {c.producto_b.nombre} ({c.temp_min}° — {c.temp_max}°C)
+                    {c.producto_a.nombre} + {c.producto_b.nombre} ({(cToF(c.temp_min) as number).toFixed(0)}° — {(cToF(c.temp_max) as number).toFixed(0)}°F)
                   </option>
                 ))}
               </optgroup>
@@ -480,9 +482,8 @@ function OVFormPanel({
         )}
 
         <label className="block text-xs font-medium text-brand-700 lg:col-span-3">
-          Instrucciones *
+          Instrucciones
           <textarea
-            required
             rows={2}
             value={form.instrucciones}
             onChange={(e) => upd("instrucciones", e.target.value)}
@@ -756,10 +757,10 @@ function OVDetailModal({
               <label className="block text-xs font-medium text-brand-700 max-w-[10rem]">
                 Cita
                 <input
-                  type="text"
-                  placeholder="6AM"
+                  type="time"
                   value={form.cita}
                   onChange={(e) => upd("cita", e.target.value)}
+                  onClick={(e) => e.currentTarget.showPicker?.()}
                   className={`${fieldCls} mt-1`}
                 />
               </label>
@@ -778,7 +779,7 @@ function OVDetailModal({
                       <optgroup label="── Individuales">
                         {productos.map((p) => (
                           <option key={p.id} value={`prod:${p.id}`}>
-                            {p.nombre} ({p.temp_min}° — {p.temp_max}°C)
+                            {p.nombre} ({(cToF(p.temp_min) as number).toFixed(0)}° — {(cToF(p.temp_max) as number).toFixed(0)}°F)
                           </option>
                         ))}
                       </optgroup>
@@ -787,7 +788,7 @@ function OVDetailModal({
                       <optgroup label="── Combinados">
                         {combinaciones.map((c) => (
                           <option key={c.id} value={`combo:${c.id}`}>
-                            {c.producto_a.nombre} + {c.producto_b.nombre} ({c.temp_min}° — {c.temp_max}°C)
+                            {c.producto_a.nombre} + {c.producto_b.nombre} ({(cToF(c.temp_min) as number).toFixed(0)}° — {(cToF(c.temp_max) as number).toFixed(0)}°F)
                           </option>
                         ))}
                       </optgroup>
@@ -837,9 +838,8 @@ function OVDetailModal({
 
               {/* Instrucciones */}
               <label className="block text-xs font-medium text-brand-700">
-                Instrucciones *
+                Instrucciones
                 <textarea
-                  required
                   rows={3}
                   value={form.instrucciones}
                   onChange={(e) => upd("instrucciones", e.target.value)}
@@ -886,9 +886,6 @@ function OVDetailModal({
               <div>
                 <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">Cliente</div>
                 <div className="text-sm font-semibold text-brand-900">{ov.cliente}</div>
-                {ov.cedi && (
-                  <div className="text-xs text-brand-500 mt-0.5">{ov.cedi}</div>
-                )}
               </div>
 
               {/* Carga / Entrega */}
@@ -900,7 +897,7 @@ function OVDetailModal({
                 </div>
                 <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3">
                   <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">
-                    Entrega{ov.cita ? ` · Cita: ${ov.cita}` : ""}
+                    Entrega{ov.cita ? ` · Cita: ${to12h(ov.cita)}` : ""}
                   </div>
                   <div className="text-sm font-medium text-brand-900">{ov.fecha_entrega}</div>
                   {ov.cedi && <div className="text-xs text-brand-500 mt-0.5">{ov.cedi}</div>}
@@ -914,7 +911,7 @@ function OVDetailModal({
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium text-brand-900">{ov.producto.nombre}</div>
-                      <div className="text-xs text-brand-500">{ov.producto.temp_min}° — {ov.producto.temp_max}°C</div>
+                      <div className="text-xs text-brand-500">{(cToF(ov.producto.temp_min) as number).toFixed(0)}° — {(cToF(ov.producto.temp_max) as number).toFixed(0)}°F</div>
                     </div>
                     {ov.cajas != null && (
                       <div className="text-right">
@@ -925,7 +922,7 @@ function OVDetailModal({
                   </div>
                 ) : combo ? (
                   <div>
-                    <div className="text-xs text-brand-500 mb-2">{combo.temp_min}° — {combo.temp_max}°C</div>
+                    <div className="text-xs text-brand-500 mb-2">{(cToF(combo.temp_min) as number).toFixed(0)}° — {(cToF(combo.temp_max) as number).toFixed(0)}°F</div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="flex items-center justify-between rounded-lg bg-white border border-brand-100 px-3 py-2">
                         <div className="text-sm font-medium text-brand-900 truncate">{combo.producto_a.nombre}</div>
@@ -945,7 +942,11 @@ function OVDetailModal({
               {/* Instrucciones */}
               <div>
                 <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">Instrucciones</div>
-                <p className="text-sm text-brand-700 whitespace-pre-wrap leading-relaxed">{ov.instrucciones}</p>
+                {ov.instrucciones && ov.instrucciones.trim() ? (
+                  <p className="text-sm text-brand-700 whitespace-pre-wrap leading-relaxed">{ov.instrucciones}</p>
+                ) : (
+                  <p className="text-sm text-brand-400">—</p>
+                )}
               </div>
             </div>
 
@@ -1507,9 +1508,6 @@ export function ViajeDetail({
                           </td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-brand-900">{ov.cliente}</div>
-                            {ov.cedi && (
-                              <div className="text-xs text-brand-400 mt-0.5">{ov.cedi}</div>
-                            )}
                           </td>
                           <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
                             <div>{ov.fecha_carga}</div>
@@ -1518,7 +1516,7 @@ export function ViajeDetail({
                           <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
                             <div>
                               {ov.fecha_entrega}
-                              {ov.cita ? ` · ${ov.cita}` : ""}
+                              {ov.cita ? ` · ${to12h(ov.cita)}` : ""}
                             </div>
                             {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                           </td>
@@ -1652,7 +1650,7 @@ export function ViajeDetail({
                 <option value="">— Sin responsable —</option>
                 {usuarios.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.nombre ? `${u.nombre} (${u.email})` : u.email}
+                    {u.nombre ?? u.email}
                   </option>
                 ))}
               </select>
@@ -1669,11 +1667,6 @@ export function ViajeDetail({
                     <div className="text-sm font-medium text-brand-900 truncate">
                       {viaje.responsable.nombre ?? viaje.responsable.email}
                     </div>
-                    {viaje.responsable.nombre && (
-                      <div className="text-xs text-brand-400 truncate">
-                        {viaje.responsable.email}
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : (
@@ -1737,7 +1730,7 @@ export function ViajeDetail({
                 Temperatura de carga
               </div>
               <div className="text-2xl font-bold text-brand-900">
-                {tempDeCarga != null ? `${tempDeCarga.toFixed(1)}°C` : "—"}
+                {tempDeCarga != null ? `${(cToF(tempDeCarga) as number).toFixed(1)}°F` : "—"}
               </div>
               {termografos.length > 1 && (
                 <div className="text-[11px] text-brand-400 mt-1">
@@ -1889,7 +1882,7 @@ export function ViajeDetail({
                           l.fuera_rango ? "text-red-600" : "text-brand-900"
                         }`}
                       >
-                        {Number(l.temperatura).toFixed(1)}°C
+                        {(cToF(Number(l.temperatura)) as number).toFixed(1)}°F
                       </td>
                       <td className="px-4 py-2 text-xs text-brand-400 hidden sm:table-cell">
                         {l.lat != null && l.lng != null
@@ -1924,7 +1917,7 @@ export function ViajeDetail({
                         </span>
                         {a.temperatura != null && (
                           <span className="text-brand-500 font-normal tabular-nums">
-                            {Number(a.temperatura).toFixed(1)}°C
+                            {(cToF(Number(a.temperatura)) as number).toFixed(1)}°F
                           </span>
                         )}
                       </div>

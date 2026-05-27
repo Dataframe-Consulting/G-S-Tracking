@@ -25,7 +25,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 type Usuario = { user_id: string; nombre: string | null; email: string | null };
 
 function usuarioLabel(u: Usuario) {
-  return u.nombre ? `${u.nombre} (${u.email})` : (u.email ?? u.user_id);
+  return u.nombre ?? u.email ?? u.user_id;
 }
 
 export function ViajeForm({

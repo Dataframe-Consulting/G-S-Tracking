@@ -1,3 +1,5 @@
+import { cToF } from "@/lib/temperature";
+
 export function TempIndicator({
   value,
   min,
@@ -12,6 +14,7 @@ export function TempIndicator({
   }
   const out =
     min != null && max != null ? value < Number(min) || value > Number(max) : false;
+  const valueF = cToF(value);
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${
@@ -19,7 +22,7 @@ export function TempIndicator({
       }`}
     >
       <span className={`inline-block w-1.5 h-1.5 rounded-full ${out ? "bg-red-500" : "bg-emerald-500"}`} />
-      {Number(value).toFixed(1)}°C
+      {valueF != null ? valueF.toFixed(1) : "—"}°F
     </span>
   );
 }
