@@ -200,7 +200,6 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-brand-900">{ov.cliente}</div>
-                      {ov.cedi && <div className="text-xs text-brand-400">{ov.cedi}</div>}
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-600">
                       <div>{ov.fecha_entrega ?? "—"}</div>

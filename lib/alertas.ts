@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendWhatsAppAlert } from "./twilio";
+import { cToF } from "./temperature";
 
 const COOLDOWN_MINUTES = 30;
 
@@ -94,10 +95,13 @@ export async function checkAlertas(
     destinatarios
   );
 
+  const tempF = (cToF(temp) as number).toFixed(1);
+  const tempMaxF = (cToF(tempMax) as number).toFixed(1);
+  const tempMinF = (cToF(tempMin) as number).toFixed(1);
   const mensaje =
     tipo === "TEMP_ALTA"
-      ? `Temperatura ALTA: ${temp}°C (máx ${tempMax}°C)`
-      : `Temperatura BAJA: ${temp}°C (mín ${tempMin}°C)`;
+      ? `Temperatura ALTA: ${tempF}°F (máx ${tempMaxF}°F)`
+      : `Temperatura BAJA: ${tempF}°F (mín ${tempMinF}°F)`;
 
   const rows = sendResults.map((r) => ({
     viaje_id: viajeId,

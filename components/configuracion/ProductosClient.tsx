@@ -3,6 +3,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import type { Producto } from "@/lib/types";
+import { cToF, fToC } from "@/lib/temperature";
 
 export interface Combinacion {
   id: string;
@@ -21,6 +22,12 @@ const tabBase =
   "px-4 py-1.5 text-sm font-semibold rounded-lg transition";
 const tabActive = "bg-brand-900 text-white";
 const tabInactive = "text-brand-600 hover:bg-brand-50";
+
+// El usuario captura/edita en °F; la BD almacena en °C.
+function cToFstr(c: number): string {
+  const f = cToF(c);
+  return f != null ? f.toFixed(1) : "";
+}
 
 // ─── Individuales ────────────────────────────────────────────────────────────
 
@@ -41,7 +48,11 @@ function IndividualesView({ initialProductos }: { initialProductos: Producto[] }
     const res = await fetch("/api/productos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: addForm.nombre.trim(), temp_min: Number(addForm.temp_min), temp_max: Number(addForm.temp_max) }),
+      body: JSON.stringify({
+        nombre: addForm.nombre.trim(),
+        temp_min: fToC(Number(addForm.temp_min)),
+        temp_max: fToC(Number(addForm.temp_max)),
+      }),
     });
     setSaving(false);
     const json = await res.json();
@@ -54,7 +65,7 @@ function IndividualesView({ initialProductos }: { initialProductos: Producto[] }
 
   function startEdit(p: Producto) {
     setEditId(p.id);
-    setEditForm({ temp_min: String(p.temp_min), temp_max: String(p.temp_max) });
+    setEditForm({ temp_min: cToFstr(p.temp_min), temp_max: cToFstr(p.temp_max) });
   }
 
   async function saveEdit(id: string) {
@@ -62,7 +73,10 @@ function IndividualesView({ initialProductos }: { initialProductos: Producto[] }
     const res = await fetch(`/api/productos/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ temp_min: Number(editForm.temp_min), temp_max: Number(editForm.temp_max) }),
+      body: JSON.stringify({
+        temp_min: fToC(Number(editForm.temp_min)),
+        temp_max: fToC(Number(editForm.temp_max)),
+      }),
     });
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || "Error al guardar"); return; }
@@ -104,14 +118,14 @@ function IndividualesView({ initialProductos }: { initialProductos: Producto[] }
                 onKeyDown={(e) => e.key === "Enter" && add()} className={`mt-1 ${inp}`} />
             </label>
             <label className="block text-sm font-medium text-brand-700">
-              Temp. mínima (°C)
-              <input type="number" step="0.1" placeholder="0" value={addForm.temp_min}
+              Temp. mínima (°F)
+              <input type="number" step="0.1" placeholder="32" value={addForm.temp_min}
                 onChange={(e) => setAddForm((s) => ({ ...s, temp_min: e.target.value }))}
                 onKeyDown={(e) => e.key === "Enter" && add()} className={`mt-1 ${inp}`} />
             </label>
             <label className="block text-sm font-medium text-brand-700">
-              Temp. máxima (°C)
-              <input type="number" step="0.1" placeholder="10" value={addForm.temp_max}
+              Temp. máxima (°F)
+              <input type="number" step="0.1" placeholder="50" value={addForm.temp_max}
                 onChange={(e) => setAddForm((s) => ({ ...s, temp_max: e.target.value }))}
                 onKeyDown={(e) => e.key === "Enter" && add()} className={`mt-1 ${inp}`} />
             </label>
@@ -135,13 +149,13 @@ function IndividualesView({ initialProductos }: { initialProductos: Producto[] }
               {editId === p.id ? (
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-1.5 text-xs text-brand-600 font-medium">
-                    Min °C
+                    Min °F
                     <input type="number" step="0.1" value={editForm.temp_min}
                       onChange={(e) => setEditForm((s) => ({ ...s, temp_min: e.target.value }))}
                       className="w-20 rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500" />
                   </label>
                   <label className="flex items-center gap-1.5 text-xs text-brand-600 font-medium">
-                    Max °C
+                    Max °F
                     <input type="number" step="0.1" value={editForm.temp_max}
                       onChange={(e) => setEditForm((s) => ({ ...s, temp_max: e.target.value }))}
                       className="w-20 rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500" />
@@ -154,7 +168,7 @@ function IndividualesView({ initialProductos }: { initialProductos: Producto[] }
               ) : (
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-brand-500 tabular-nums">
-                    {p.temp_min}° — {p.temp_max}°C
+                    {cToFstr(p.temp_min)}° — {cToFstr(p.temp_max)}°F
                   </span>
                   <button onClick={() => startEdit(p)}
                     className="text-xs text-brand-400 hover:text-brand-700 hover:underline transition shrink-0">
@@ -194,7 +208,12 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
     const res = await fetch("/api/producto-combinaciones", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, temp_min: Number(form.temp_min), temp_max: Number(form.temp_max) }),
+      body: JSON.stringify({
+        producto_a_id: form.producto_a_id,
+        producto_b_id: form.producto_b_id,
+        temp_min: fToC(Number(form.temp_min)),
+        temp_max: fToC(Number(form.temp_max)),
+      }),
     });
     setSaving(false);
     const json = await res.json();
@@ -207,7 +226,7 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
 
   function startEdit(c: Combinacion) {
     setEditId(c.id);
-    setEditForm({ temp_min: String(c.temp_min), temp_max: String(c.temp_max) });
+    setEditForm({ temp_min: cToFstr(c.temp_min), temp_max: cToFstr(c.temp_max) });
   }
 
   async function saveEdit(id: string) {
@@ -215,7 +234,10 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
     const res = await fetch(`/api/producto-combinaciones/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ temp_min: Number(editForm.temp_min), temp_max: Number(editForm.temp_max) }),
+      body: JSON.stringify({
+        temp_min: fToC(Number(editForm.temp_min)),
+        temp_max: fToC(Number(editForm.temp_max)),
+      }),
     });
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || "Error al guardar"); return; }
@@ -267,14 +289,14 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
               </select>
             </label>
             <label className="block text-sm font-medium text-brand-700">
-              Temp. mínima (°C)
-              <input type="number" step="0.1" placeholder="0" value={form.temp_min}
+              Temp. mínima (°F)
+              <input type="number" step="0.1" placeholder="32" value={form.temp_min}
                 onChange={(e) => setForm((s) => ({ ...s, temp_min: e.target.value }))}
                 className={`mt-1 ${inp}`} />
             </label>
             <label className="block text-sm font-medium text-brand-700">
-              Temp. máxima (°C)
-              <input type="number" step="0.1" placeholder="10" value={form.temp_max}
+              Temp. máxima (°F)
+              <input type="number" step="0.1" placeholder="50" value={form.temp_max}
                 onChange={(e) => setForm((s) => ({ ...s, temp_max: e.target.value }))}
                 className={`mt-1 ${inp}`} />
             </label>
@@ -302,13 +324,13 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
               {editId === c.id ? (
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-1.5 text-xs text-brand-600 font-medium">
-                    Min °C
+                    Min °F
                     <input type="number" step="0.1" value={editForm.temp_min}
                       onChange={(e) => setEditForm((s) => ({ ...s, temp_min: e.target.value }))}
                       className="w-20 rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500" />
                   </label>
                   <label className="flex items-center gap-1.5 text-xs text-brand-600 font-medium">
-                    Max °C
+                    Max °F
                     <input type="number" step="0.1" value={editForm.temp_max}
                       onChange={(e) => setEditForm((s) => ({ ...s, temp_max: e.target.value }))}
                       className="w-20 rounded-lg border border-brand-200 px-2 py-1 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500" />
@@ -321,7 +343,7 @@ function CombinadosView({ productos, initialCombinaciones }: { productos: Produc
               ) : (
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-brand-500 tabular-nums shrink-0">
-                    {c.temp_min}° — {c.temp_max}°C
+                    {cToFstr(c.temp_min)}° — {cToFstr(c.temp_max)}°F
                   </span>
                   <button onClick={() => startEdit(c)}
                     className="text-xs text-brand-400 hover:text-brand-700 hover:underline transition shrink-0">

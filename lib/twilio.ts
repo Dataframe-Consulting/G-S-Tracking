@@ -1,4 +1,5 @@
 import Twilio from "twilio";
+import { cToF } from "./temperature";
 
 export interface WhatsAppAlertPayload {
   cargaRef: string;
@@ -20,14 +21,17 @@ export interface WhatsAppSendResult {
 function buildMessage(p: WhatsAppAlertPayload): string {
   const header =
     p.tipo === "TEMP_ALTA" ? "🔴 Temperatura ALTA" : "🔵 Temperatura BAJA";
+  const tempActualF = (cToF(p.tempActual) as number).toFixed(1);
+  const tempMinF = (cToF(p.tempMin) as number).toFixed(1);
+  const tempMaxF = (cToF(p.tempMax) as number).toFixed(1);
   const lines = [
     "⚠️ *ALERTA TEMPERATURA*",
     "",
     `*Carga:* ${p.cargaRef}`,
     `*Cliente:* ${p.cliente}`,
     `*Producto:* ${p.producto}`,
-    `*Temperatura actual:* ${p.tempActual}°C`,
-    `*Rango permitido:* ${p.tempMin}°C – ${p.tempMax}°C`,
+    `*Temperatura actual:* ${tempActualF}°F`,
+    `*Rango permitido:* ${tempMinF}°F – ${tempMaxF}°F`,
     `*Tipo:* ${header}`
   ];
   if (p.ubicacion) lines.push(`*Ubicación:* ${p.ubicacion}`);

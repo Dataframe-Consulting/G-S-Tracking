@@ -23,7 +23,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     "fecha_carga",
     "lugar_carga",
     "fecha_entrega",
-    "instrucciones",
   ];
   for (const k of required) {
     if (!body[k]) return NextResponse.json({ error: `Falta ${k}` }, { status: 400 });
@@ -48,7 +47,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     lugar_entrega: body.lugar_entrega ?? "",
     cita: body.cita ?? null,
     status: body.status ?? "PENDIENTE",
-    instrucciones: body.instrucciones,
+    instrucciones: body.instrucciones ?? "",
     producto_id: body.producto_id ?? null,
     producto_combinacion_id: body.producto_combinacion_id ?? null,
     cajas: body.cajas != null ? Number(body.cajas) : null,
