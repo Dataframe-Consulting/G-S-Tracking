@@ -9,3 +9,7 @@ dist
 .DS_Store
 .vercel
 next-env.d.ts
+
+# Local-only / per-developer files
+CLAUDE.md
+.claude/settings.local.json
