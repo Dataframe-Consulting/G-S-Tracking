@@ -164,3 +164,14 @@ export interface Transportista {
   contacto: string | null;
   created_at: string;
 }
+
+export interface Auditoria {
+  id: string;
+  viaje_id: string | null;
+  ov_id: string | null;
+  user_id: string | null;
+  user_nombre: string | null;
+  tipo: "CREACION" | "MODIFICACION";
+  descripcion: string;
+  created_at: string;
+}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { logAudit } from "@/lib/audit";
 
 const VIAJE_SELECT = `
   *,
@@ -51,6 +52,12 @@ export async function POST(req: Request) {
       .update({ asignado: true, viaje_id: data.id })
       .eq("id", data.termografo_id);
   }
+
+  await logAudit(supabase, {
+    viaje_id: data.id,
+    tipo: "CREACION",
+    descripcion: `Creó viaje ${data.lugar_inicio} → ${data.lugar_fin}`,
+  });
 
   return NextResponse.json({ data }, { status: 201 });
 }

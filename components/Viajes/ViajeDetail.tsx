@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type {
   AlertaLog,
+  Auditoria,
   LecturaTemperatura,
   OrdenVenta,
   Producto,
@@ -23,6 +24,7 @@ import { TempChart } from "@/components/Temperatura/TempChart";
 import { AlertaBanner } from "@/components/Alertas/AlertaBanner";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
+import { ModificacionesSection } from "@/components/Viajes/ModificacionesSection";
 import { cToF } from "@/lib/temperature";
 import { to12h } from "@/lib/time";
 
@@ -1059,11 +1061,13 @@ export function ViajeDetail({
   lecturas: initialLecturas,
   alertas,
   termografos: initialTermografos,
+  auditoria,
 }: {
   viaje: Viaje;
   lecturas: LecturaTemperatura[];
   alertas: AlertaLog[];
   termografos: Termografo[];
+  auditoria: Auditoria[];
 }) {
   const router = useRouter();
   const [viaje, setViaje] = useState(initialViaje);
@@ -1521,7 +1525,10 @@ export function ViajeDetail({
                             {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                           </td>
                           <td className="px-4 py-3 hidden lg:table-cell text-xs text-brand-500">
-                            {ov.producto?.nombre ?? "—"}
+                            {ov.producto?.nombre ??
+                              (ov.combo
+                                ? `${ov.combo.producto_a.nombre} + ${ov.combo.producto_b.nombre}`
+                                : "—")}
                           </td>
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <select
@@ -1940,6 +1947,12 @@ export function ViajeDetail({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Modificaciones */}
+      <div>
+        <SectionHeader>Modificaciones</SectionHeader>
+        <ModificacionesSection numero={viaje.numero} auditoria={auditoria} />
       </div>
     </div>
   );
