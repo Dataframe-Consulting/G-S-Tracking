@@ -86,7 +86,7 @@ export function ClientesConCedisClient({
 
   async function addCedi(clienteId: string) {
     const nombre = (cediForm[clienteId] ?? "").trim();
-    if (!nombre) { toast.error("Nombre del cedi requerido"); return; }
+    if (!nombre) { toast.error("Nombre del CEDIS requerido"); return; }
     setSavingCedi(clienteId);
     const res = await fetch(`/api/clientes/${clienteId}/cedis`, {
       method: "POST",
@@ -96,7 +96,7 @@ export function ClientesConCedisClient({
     setSavingCedi(null);
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || "Error al guardar"); return; }
-    toast.success("Cedi agregado");
+    toast.success("CEDIS agregado");
     setCediForm((f) => ({ ...f, [clienteId]: "" }));
     setClientes((prev) =>
       prev.map((c) =>
@@ -126,7 +126,7 @@ export function ClientesConCedisClient({
     });
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || "Error al guardar"); return; }
-    toast.success("Cedi actualizado");
+    toast.success("CEDIS actualizado");
     setClientes((prev) =>
       prev.map((c) =>
         c.id === clienteId
@@ -142,7 +142,7 @@ export function ClientesConCedisClient({
     const res = await fetch(`/api/clientes/${clienteId}/cedis/${cediId}`, { method: "DELETE" });
     setDeletingCedi(null);
     if (!res.ok) { const j = await res.json().catch(() => ({})); toast.error(j.error || "Error"); return; }
-    toast.success("Cedi eliminado");
+    toast.success("CEDIS eliminado");
     setClientes((prev) =>
       prev.map((c) =>
         c.id === clienteId
@@ -261,8 +261,8 @@ export function ClientesConCedisClient({
                           <span className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}>▾</span>
                           <span>
                             {cedis.length > 0
-                              ? `${cedis.length} cedi${cedis.length !== 1 ? "s" : ""}`
-                              : "Cedis"}
+                              ? `${cedis.length} CEDIS`
+                              : "CEDIS"}
                           </span>
                         </button>
                         <button
@@ -330,7 +330,7 @@ export function ClientesConCedisClient({
                       </ul>
                     ) : (
                       <p className="text-xs text-brand-300 italic mt-3 mb-3">
-                        Sin cedis. Agrega el primero.
+                        Sin CEDIS. Agrega el primero.
                       </p>
                     )}
 
@@ -351,7 +351,7 @@ export function ClientesConCedisClient({
                         disabled={savingCedi === cliente.id}
                         className="rounded-xl bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60 transition shrink-0"
                       >
-                        {savingCedi === cliente.id ? "…" : "+ Cedi"}
+                        {savingCedi === cliente.id ? "…" : "+ CEDIS"}
                       </button>
                     </div>
                   </div>

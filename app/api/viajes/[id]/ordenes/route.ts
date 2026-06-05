@@ -19,11 +19,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const body = await req.json();
 
   const required = [
-    "ov_ref",
     "cliente",
     "fecha_carga",
     "lugar_carga",
-    "fecha_entrega",
   ];
   for (const k of required) {
     if (!body[k]) return NextResponse.json({ error: `Falta ${k}` }, { status: 400 });
@@ -39,14 +37,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const payload = {
     viaje_id: params.id,
-    ov_ref: body.ov_ref,
+    ov_ref: body.ov_ref || null,
     cliente: body.cliente,
     cedi: body.cedi ?? null,
     fecha_carga: body.fecha_carga,
     lugar_carga: body.lugar_carga,
-    fecha_entrega: body.fecha_entrega,
+    fecha_entrega: body.fecha_entrega || null,
     lugar_entrega: body.lugar_entrega ?? "",
     cita: body.cita ?? null,
+    tiene_cita: body.tiene_cita ?? false,
+    po: body.po || null,
+    folio_cita: body.folio_cita || null,
+    factura_gys: body.factura_gys || null,
     status: body.status ?? "PENDIENTE",
     instrucciones: body.instrucciones ?? "",
     producto_id: body.producto_id ?? null,
@@ -73,7 +75,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     viaje_id: params.id,
     ov_id: data.id,
     tipo: "CREACION",
-    descripcion: `Creó OV ${data.ov_ref} (${detalle})`,
+    descripcion: `Creó OV ${data.ov_ref ?? "(sin ref)"} (${detalle})`,
   });
 
   return NextResponse.json({ data }, { status: 201 });

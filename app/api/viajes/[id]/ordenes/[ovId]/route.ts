@@ -10,9 +10,12 @@ const OV_FIELD_LABELS: Record<string, string> = {
   cedi: "cedi",
   fecha_carga: "fecha de carga",
   lugar_carga: "lugar de carga",
-  fecha_entrega: "fecha de entrega",
+  fecha_entrega: "fecha de la cita",
   lugar_entrega: "lugar de entrega",
-  cita: "cita",
+  cita: "hora de la cita",
+  po: "PO",
+  folio_cita: "folio de cita",
+  factura_gys: "factura GyS",
   instrucciones: "instrucciones",
   cajas: "cajas",
   cajas_b: "cajas (B)",
@@ -42,7 +45,7 @@ export async function PATCH(
   const { data: prev } = await supabase
     .from("ordenes_venta")
     .select(
-      "ov_ref, cliente, cedi, fecha_carga, lugar_carga, fecha_entrega, lugar_entrega, cita, status, instrucciones, producto_id, producto_combinacion_id, cajas, cajas_b"
+      "ov_ref, cliente, cedi, fecha_carga, lugar_carga, fecha_entrega, lugar_entrega, cita, tiene_cita, po, folio_cita, factura_gys, status, instrucciones, producto_id, producto_combinacion_id, cajas, cajas_b"
     )
     .eq("id", params.ovId)
     .eq("viaje_id", params.id)
@@ -58,6 +61,10 @@ export async function PATCH(
     "fecha_entrega",
     "lugar_entrega",
     "cita",
+    "tiene_cita",
+    "po",
+    "folio_cita",
+    "factura_gys",
     "status",
     "instrucciones",
     "producto_id",
@@ -66,6 +73,9 @@ export async function PATCH(
     "cajas_b",
   ];
   for (const k of allowed) if (k in body) update[k] = body[k];
+  for (const k of ["ov_ref", "fecha_entrega", "cita", "po", "folio_cita", "factura_gys"]) {
+    if (k in update && !update[k]) update[k] = null;
+  }
 
   const { data, error } = await supabase
     .from("ordenes_venta")
@@ -79,7 +89,7 @@ export async function PATCH(
 
   // Auditoría: una entrada por campo que realmente cambió
   if (prev) {
-    const ref = data.ov_ref;
+    const ref = data.ov_ref ?? "(sin ref)";
     const descripciones: string[] = [];
 
     if ("status" in body && prev.status !== data.status) {

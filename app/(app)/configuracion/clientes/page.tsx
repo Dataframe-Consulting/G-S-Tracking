@@ -21,7 +21,7 @@ export default async function ClientesPage() {
           Clientes
         </h1>
         <p className="text-sm text-brand-500 mt-0.5">
-          Directorio de clientes y sus centros de distribución (cedis).
+          Directorio de clientes y sus centros de distribución (CEDIS).
         </p>
       </div>
       <ClientesConCedisClient initialData={data ?? []} />

@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 const VIAJE_SELECT = `
   *,
   responsable:user_profiles!responsable_id(id, nombre, email),
+  linea:lineas_transportista!linea_transportista_id ( id, nombre, concesionario:concesionarios!concesionario_id ( id, nombre ) ),
   ordenes_venta ( id, ov_ref, cliente, status, producto_id, producto:productos(id, nombre, temp_min, temp_max) )
 `;
 

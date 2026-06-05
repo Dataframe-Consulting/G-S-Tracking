@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { CatalogoClient } from "@/components/configuracion/CatalogoClient";
+import { ConcesionariosClient } from "@/components/configuracion/ConcesionariosClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function TransportistasPage() {
   const supabase = createServerSupabase();
-  const { data } = await supabase.from("transportistas").select("*").order("nombre");
+  const { data } = await supabase
+    .from("concesionarios")
+    .select("*, lineas_transportista(*)")
+    .order("nombre");
 
   return (
     <div className="space-y-6">
@@ -18,17 +21,10 @@ export default async function TransportistasPage() {
           Transportistas
         </h1>
         <p className="text-sm text-brand-500 mt-0.5">
-          Directorio de transportistas y sus contactos.
+          Catálogo de concesionarios y sus líneas transportistas.
         </p>
       </div>
-      <CatalogoClient
-        endpoint="/api/transportistas"
-        initialData={data ?? []}
-        fields={[
-          { key: "nombre",   label: "Nombre del transportista", placeholder: "Ej. Transportes del Norte", primary: true },
-          { key: "contacto", label: "Contacto", placeholder: "Correo, teléfono, etc.", required: false }
-        ]}
-      />
+      <ConcesionariosClient initialData={data ?? []} />
     </div>
   );
 }

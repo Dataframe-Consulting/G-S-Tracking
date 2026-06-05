@@ -187,7 +187,7 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                   <th className="text-left px-4 py-3 font-medium">Cliente</th>
                   <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Entrega</th>
                   <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Producto</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
+                  <th className="text-left px-4 py-3 font-medium">Estatus</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-50">
@@ -212,8 +212,8 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                           ? `${ov.combo.producto_a.nombre} + ${ov.combo.producto_b.nombre}`
                           : "—"}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_CLASSES[ov.status]}`}>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_CLASSES[ov.status]}`}>
                         {STATUS_LABELS[ov.status]}
                       </span>
                     </td>
@@ -479,11 +479,12 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                     <th className="text-left px-4 py-3 font-medium"># Viaje</th>
                     <th className="text-left px-4 py-3 font-medium">Ruta</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Clientes</th>
+                    <th className="text-left px-4 py-3 font-medium hidden md:table-cell">CEDIS</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Fechas</th>
                     <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Flete</th>
                     <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Termógrafo</th>
                     <th className="text-left px-4 py-3 font-medium">Temp</th>
-                    <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">OVs</th>
+                    <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">OVS/REF</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Resp.</th>
                   </tr>
                 </thead>
@@ -492,6 +493,11 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                     const ovCount = v.ordenes_venta?.length ?? 0;
                     const firstProducto = v.ordenes_venta?.[0]?.producto;
                     const clientes = unique(v.ordenes_venta?.map((o) => o.cliente) ?? []);
+                    const cedis = unique(
+                      (v.ordenes_venta ?? [])
+                        .map((o) => o.cedi)
+                        .filter(Boolean) as string[]
+                    );
                     const clientesLabel =
                       clientes.length === 0
                         ? null
@@ -511,12 +517,14 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                         <td className="px-4 py-3">
                           <Link
                             href={`/viajes/${v.id}`}
-                            className="font-semibold text-brand-900 group-hover:text-brand-700 transition-colors"
+                            className="flex flex-col leading-tight font-semibold text-brand-900 group-hover:text-brand-700 transition-colors"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {v.lugar_inicio}
-                            <span className="text-brand-400 mx-1.5">→</span>
-                            {v.lugar_fin}
+                            <span>{v.lugar_inicio}</span>
+                            <span>
+                              <span className="text-brand-400 mr-1">→</span>
+                              {v.lugar_fin}
+                            </span>
                           </Link>
                           {v.ordenes_venta && v.ordenes_venta.length > 0 && (
                             <div className="sm:hidden text-xs text-brand-400 mt-0.5">
@@ -531,12 +539,23 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                             <span className="text-brand-300">—</span>
                           )}
                         </td>
+                        <td className="px-4 py-3 hidden md:table-cell text-xs text-brand-700">
+                          {cedis.length > 0 ? (
+                            <span className="inline-flex flex-col gap-0.5">
+                              {cedis.map((c) => (
+                                <span key={c}>{c}</span>
+                              ))}
+                            </span>
+                          ) : (
+                            <span className="text-brand-300">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 hidden md:table-cell text-brand-600 tabular-nums text-xs">
                           <div>{v.fecha_inicio}</div>
                           <div className="text-brand-400">{v.fecha_fin}</div>
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell text-brand-500 text-xs">
-                          {v.flete_cargo ?? <span className="text-brand-300">—</span>}
+                          {v.linea?.concesionario?.nombre ?? v.flete_cargo ?? <span className="text-brand-300">—</span>}
                         </td>
                         <td
                           className="px-4 py-3 hidden lg:table-cell"
@@ -551,7 +570,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                               onClick={() => setModalViajeId(v.id)}
                               className="rounded-lg border border-brand-200 px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-400 transition whitespace-nowrap"
                             >
-                              + Agregar termógrafo
+                              + Termógrafo
                             </button>
                           )}
                         </td>
@@ -566,9 +585,17 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           className="px-4 py-3 hidden sm:table-cell"
                           onClick={(e) => { e.stopPropagation(); if (ovCount > 0) setOvsModalViaje(v); }}
                         >
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full transition ${ovCount > 0 ? "text-brand-700 bg-brand-50 hover:bg-brand-200 cursor-pointer" : "text-brand-300 bg-brand-50"}`}>
-                            {ovCount} OV{ovCount !== 1 ? "s" : ""}
-                          </span>
+                          {ovCount > 0 ? (
+                            <span className="inline-flex flex-col gap-0.5 text-xs font-medium px-2 py-1 rounded-lg transition text-brand-700 bg-brand-50 hover:bg-brand-200 cursor-pointer">
+                              {(v.ordenes_venta ?? []).map((o) => (
+                                <span key={o.id}>{o.ov_ref || "—"}</span>
+                              ))}
+                            </span>
+                          ) : (
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full text-brand-300 bg-brand-50">
+                              0 OVs
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <ResponsableAvatar responsable={v.responsable} />

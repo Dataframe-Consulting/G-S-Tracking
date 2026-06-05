@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import type {
   AlertaLog,
   Auditoria,
+  Concesionario,
   LecturaTemperatura,
   OrdenVenta,
   Producto,
@@ -133,6 +134,10 @@ type OVFormData = {
   lugar_carga: string;
   fecha_entrega: string;
   cita: string;
+  tiene_cita: boolean;
+  po: string;
+  folio_cita: string;
+  factura_gys: string;
   status: Status;
   instrucciones: string;
   producto_sel: string;
@@ -150,6 +155,10 @@ const emptyOVForm = (today: string): OVFormData => ({
   lugar_carga: "",
   fecha_entrega: today,
   cita: "",
+  tiene_cita: false,
+  po: "",
+  folio_cita: "",
+  factura_gys: "",
   status: "PENDIENTE",
   instrucciones: "",
   producto_sel: "",
@@ -185,8 +194,12 @@ function OVFormPanel({
           cedi: editingOV.cedi ?? "",
           fecha_carga: editingOV.fecha_carga,
           lugar_carga: editingOV.lugar_carga,
-          fecha_entrega: editingOV.fecha_entrega,
+          fecha_entrega: editingOV.fecha_entrega ?? "",
           cita: editingOV.cita ?? "",
+          tiene_cita: editingOV.tiene_cita ?? false,
+          po: editingOV.po ?? "",
+          folio_cita: editingOV.folio_cita ?? "",
+          factura_gys: editingOV.factura_gys ?? "",
           status: editingOV.status,
           instrucciones: editingOV.instrucciones,
           producto_sel: productoSelFromOV(editingOV),
@@ -220,7 +233,7 @@ function OVFormPanel({
       return;
     }
     if (clienteCedis.length > 0 && !form.cedi) {
-      toast.error("Selecciona un cedi");
+      toast.error("Selecciona un CEDIS");
       return;
     }
     setSaving(true);
@@ -231,8 +244,12 @@ function OVFormPanel({
       cedi: form.cedi || null,
       fecha_carga: form.fecha_carga,
       lugar_carga: form.lugar_carga,
-      fecha_entrega: form.fecha_entrega,
-      cita: form.cita || null,
+      fecha_entrega: form.tiene_cita ? form.fecha_entrega || null : null,
+      cita: form.tiene_cita ? form.cita || null : null,
+      tiene_cita: form.tiene_cita,
+      po: form.tiene_cita ? form.po || null : null,
+      folio_cita: form.tiene_cita ? form.folio_cita || null : null,
+      factura_gys: form.tiene_cita ? form.factura_gys || null : null,
       status: form.status,
       instrucciones: form.instrucciones,
       producto_id,
@@ -267,15 +284,14 @@ function OVFormPanel({
       className="bg-brand-50 rounded-2xl border border-brand-200 p-5 space-y-4"
     >
       <div className="font-display font-semibold text-brand-900 text-sm uppercase tracking-widest">
-        {editingOV ? "Editar OV" : "Nueva OV"}
+        {editingOV ? "Editar Carga" : "Nueva Carga"}
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <label className="block text-xs font-medium text-brand-700">
-          OV / REF *
+          OV / REF
           <input
             type="text"
-            required
             value={form.ov_ref}
             onChange={(e) => upd("ov_ref", e.target.value)}
             className={`${fieldCls} font-mono mt-1`}
@@ -302,14 +318,14 @@ function OVFormPanel({
         </label>
         {clienteCedis.length > 0 && (
           <label className="block text-xs font-medium text-brand-700">
-            Cedi *
+            CEDIS *
             <select
               required
               value={form.cedi}
               onChange={(e) => upd("cedi", e.target.value)}
               className={`${fieldCls} bg-white mt-1`}
             >
-              <option value="">— Selecciona cedi —</option>
+              <option value="">— Selecciona CEDIS —</option>
               {clienteCedis.map((d) => (
                 <option key={d.id} value={d.nombre}>
                   {d.nombre}
@@ -393,27 +409,6 @@ function OVFormPanel({
           )}
         </div>
         <label className="block text-xs font-medium text-brand-700">
-          Cita
-          <input
-            type="time"
-            value={form.cita}
-            onChange={(e) => upd("cita", e.target.value)}
-            onClick={(e) => e.currentTarget.showPicker?.()}
-            className={`${fieldCls} mt-1`}
-          />
-        </label>
-
-        <label className="block text-xs font-medium text-brand-700">
-          Fecha de entrega *
-          <input
-            type="date"
-            required
-            value={form.fecha_entrega}
-            onChange={(e) => upd("fecha_entrega", e.target.value)}
-            className={`${fieldCls} mt-1`}
-          />
-        </label>
-        <label className="block text-xs font-medium text-brand-700">
           Producto *
           <select
             value={form.producto_sel}
@@ -489,10 +484,72 @@ function OVFormPanel({
             rows={2}
             value={form.instrucciones}
             onChange={(e) => upd("instrucciones", e.target.value)}
-            placeholder="768 CAJAS AGUACATE CONVENCIONAL / 420 CAJAS AGUACATE ORGÁNICO"
             className={`${fieldCls} mt-1 resize-none`}
           />
         </label>
+      </div>
+
+      {/* ¿Existe cita? */}
+      <div className="rounded-2xl border border-brand-200 bg-white/60 p-4 space-y-3">
+        <label className="flex items-center gap-2 text-sm font-medium text-brand-800 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={form.tiene_cita}
+            onChange={(e) => upd("tiene_cita", e.target.checked)}
+            className="h-4 w-4 rounded border-brand-300 text-brand-700 focus:ring-brand-500"
+          />
+          ¿Existe cita?
+        </label>
+        {form.tiene_cita && (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <label className="block text-xs font-medium text-brand-700">
+              PO
+              <input
+                type="text"
+                value={form.po}
+                onChange={(e) => upd("po", e.target.value)}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Folio de cita
+              <input
+                type="text"
+                value={form.folio_cita}
+                onChange={(e) => upd("folio_cita", e.target.value)}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Fecha de la cita
+              <input
+                type="date"
+                value={form.fecha_entrega}
+                onChange={(e) => upd("fecha_entrega", e.target.value)}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Hora de la cita
+              <input
+                type="time"
+                value={form.cita}
+                onChange={(e) => upd("cita", e.target.value)}
+                onClick={(e) => e.currentTarget.showPicker?.()}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Factura
+              <input
+                type="text"
+                value={form.factura_gys}
+                onChange={(e) => upd("factura_gys", e.target.value)}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-3 pt-1">
@@ -501,7 +558,7 @@ function OVFormPanel({
           disabled={saving}
           className="rounded-xl bg-brand-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60 transition shadow-sm"
         >
-          {saving ? "Guardando…" : editingOV ? "Guardar cambios" : "Agregar OV"}
+          {saving ? "Guardando…" : editingOV ? "Guardar cambios" : "Agregar Carga"}
         </button>
         <button
           type="button"
@@ -544,8 +601,12 @@ function OVDetailModal({
     cedi: initialOv.cedi ?? "",
     fecha_carga: initialOv.fecha_carga,
     lugar_carga: initialOv.lugar_carga,
-    fecha_entrega: initialOv.fecha_entrega,
+    fecha_entrega: initialOv.fecha_entrega ?? "",
     cita: initialOv.cita ?? "",
+    tiene_cita: initialOv.tiene_cita ?? false,
+    po: initialOv.po ?? "",
+    folio_cita: initialOv.folio_cita ?? "",
+    factura_gys: initialOv.factura_gys ?? "",
     status: initialOv.status,
     instrucciones: initialOv.instrucciones,
     producto_sel: productoSelFromOV(initialOv),
@@ -565,8 +626,12 @@ function OVDetailModal({
       cedi: ov.cedi ?? "",
       fecha_carga: ov.fecha_carga,
       lugar_carga: ov.lugar_carga,
-      fecha_entrega: ov.fecha_entrega,
+      fecha_entrega: ov.fecha_entrega ?? "",
       cita: ov.cita ?? "",
+      tiene_cita: ov.tiene_cita ?? false,
+      po: ov.po ?? "",
+      folio_cita: ov.folio_cita ?? "",
+      factura_gys: ov.factura_gys ?? "",
       status: ov.status,
       instrucciones: ov.instrucciones,
       producto_sel: productoSelFromOV(ov),
@@ -583,7 +648,7 @@ function OVDetailModal({
     e.preventDefault();
     if (!form.producto_sel) { toast.error("Selecciona un producto"); return; }
     if (modalClienteCedis.length > 0 && !form.cedi) {
-      toast.error("Selecciona un cedi");
+      toast.error("Selecciona un CEDIS");
       return;
     }
     setSaving(true);
@@ -594,8 +659,12 @@ function OVDetailModal({
       cedi: form.cedi || null,
       fecha_carga: form.fecha_carga,
       lugar_carga: form.lugar_carga,
-      fecha_entrega: form.fecha_entrega,
-      cita: form.cita || null,
+      fecha_entrega: form.tiene_cita ? form.fecha_entrega || null : null,
+      cita: form.tiene_cita ? form.cita || null : null,
+      tiene_cita: form.tiene_cita,
+      po: form.tiene_cita ? form.po || null : null,
+      folio_cita: form.tiene_cita ? form.folio_cita || null : null,
+      factura_gys: form.tiene_cita ? form.factura_gys || null : null,
       status: form.status,
       instrucciones: form.instrucciones,
       producto_id,
@@ -643,7 +712,7 @@ function OVDetailModal({
           <form onSubmit={save}>
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-brand-50">
               <div className="font-display font-bold text-brand-900">
-                Editar OV
+                Editar Carga
                 <span className="ml-2 font-mono text-brand-400 font-normal text-sm">{ov.ov_ref}</span>
               </div>
               <button
@@ -659,10 +728,9 @@ function OVDetailModal({
               {/* OV/REF + Status */}
               <div className="grid sm:grid-cols-2 gap-3">
                 <label className="block text-xs font-medium text-brand-700">
-                  OV / REF *
+                  OV / REF
                   <input
                     type="text"
-                    required
                     value={form.ov_ref}
                     onChange={(e) => upd("ov_ref", e.target.value)}
                     className={`${fieldCls} font-mono mt-1`}
@@ -700,14 +768,14 @@ function OVDetailModal({
                 </label>
                 {modalClienteCedis.length > 0 && (
                   <label className="block text-xs font-medium text-brand-700">
-                    Cedi *
+                    CEDIS *
                     <select
                       required
                       value={form.cedi}
                       onChange={(e) => upd("cedi", e.target.value)}
                       className={`${fieldCls} bg-white mt-1`}
                     >
-                      <option value="">— Selecciona cedi —</option>
+                      <option value="">— Selecciona CEDIS —</option>
                       {modalClienteCedis.map((d) => (
                         <option key={d.id} value={d.nombre}>{d.nombre}</option>
                       ))}
@@ -740,32 +808,6 @@ function OVDetailModal({
                   />
                 </label>
               </div>
-
-              {/* Entrega */}
-              <div className="grid sm:grid-cols-3 gap-3">
-                <label className="block text-xs font-medium text-brand-700">
-                  Fecha entrega *
-                  <input
-                    type="date"
-                    required
-                    value={form.fecha_entrega}
-                    onChange={(e) => upd("fecha_entrega", e.target.value)}
-                    className={`${fieldCls} mt-1`}
-                  />
-                </label>
-              </div>
-
-              {/* Cita */}
-              <label className="block text-xs font-medium text-brand-700 max-w-[10rem]">
-                Cita
-                <input
-                  type="time"
-                  value={form.cita}
-                  onChange={(e) => upd("cita", e.target.value)}
-                  onClick={(e) => e.currentTarget.showPicker?.()}
-                  className={`${fieldCls} mt-1`}
-                />
-              </label>
 
               {/* Producto + Cajas */}
               <div className={`grid gap-3 ${isProd ? "sm:grid-cols-2" : isCombo ? "sm:grid-cols-3" : ""}`}>
@@ -845,10 +887,72 @@ function OVDetailModal({
                   rows={3}
                   value={form.instrucciones}
                   onChange={(e) => upd("instrucciones", e.target.value)}
-                  placeholder="768 CAJAS AGUACATE CONVENCIONAL"
                   className={`${fieldCls} mt-1 resize-none`}
                 />
               </label>
+
+              {/* ¿Existe cita? */}
+              <div className="rounded-xl border border-brand-200 bg-brand-50/40 p-4 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-brand-800 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.tiene_cita}
+                    onChange={(e) => upd("tiene_cita", e.target.checked)}
+                    className="h-4 w-4 rounded border-brand-300 text-brand-700 focus:ring-brand-500"
+                  />
+                  ¿Existe cita?
+                </label>
+                {form.tiene_cita && (
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="block text-xs font-medium text-brand-700">
+                      PO
+                      <input
+                        type="text"
+                        value={form.po}
+                        onChange={(e) => upd("po", e.target.value)}
+                        className={`${fieldCls} mt-1`}
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-brand-700">
+                      Folio de cita
+                      <input
+                        type="text"
+                        value={form.folio_cita}
+                        onChange={(e) => upd("folio_cita", e.target.value)}
+                        className={`${fieldCls} mt-1`}
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-brand-700">
+                      Fecha de la cita
+                      <input
+                        type="date"
+                        value={form.fecha_entrega}
+                        onChange={(e) => upd("fecha_entrega", e.target.value)}
+                        className={`${fieldCls} mt-1`}
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-brand-700">
+                      Hora de la cita
+                      <input
+                        type="time"
+                        value={form.cita}
+                        onChange={(e) => upd("cita", e.target.value)}
+                        onClick={(e) => e.currentTarget.showPicker?.()}
+                        className={`${fieldCls} mt-1`}
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-brand-700">
+                      Factura
+                      <input
+                        type="text"
+                        value={form.factura_gys}
+                        onChange={(e) => upd("factura_gys", e.target.value)}
+                        className={`${fieldCls} mt-1`}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-3 px-6 pb-5 pt-2 border-t border-brand-50">
@@ -888,9 +992,10 @@ function OVDetailModal({
               <div>
                 <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">Cliente</div>
                 <div className="text-sm font-semibold text-brand-900">{ov.cliente}</div>
+                {ov.cedi && <div className="text-xs text-brand-500 mt-0.5">CEDIS: {ov.cedi}</div>}
               </div>
 
-              {/* Carga / Entrega */}
+              {/* Carga / Cita */}
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3">
                   <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">Carga</div>
@@ -898,11 +1003,21 @@ function OVDetailModal({
                   <div className="text-xs text-brand-500 mt-0.5">{ov.lugar_carga}</div>
                 </div>
                 <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">
-                    Entrega{ov.cita ? ` · Cita: ${to12h(ov.cita)}` : ""}
-                  </div>
-                  <div className="text-sm font-medium text-brand-900">{ov.fecha_entrega}</div>
-                  {ov.cedi && <div className="text-xs text-brand-500 mt-0.5">{ov.cedi}</div>}
+                  <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">Cita</div>
+                  {ov.tiene_cita ? (
+                    <div className="space-y-0.5">
+                      {ov.fecha_entrega && (
+                        <div className="text-sm font-medium text-brand-900">
+                          {ov.fecha_entrega}{ov.cita ? ` · ${to12h(ov.cita)}` : ""}
+                        </div>
+                      )}
+                      {ov.po && <div className="text-xs text-brand-500">PO: {ov.po}</div>}
+                      {ov.folio_cita && <div className="text-xs text-brand-500">Folio: {ov.folio_cita}</div>}
+                      {ov.factura_gys && <div className="text-xs text-brand-500">Factura GyS: {ov.factura_gys}</div>}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-brand-400">Sin cita</div>
+                  )}
                 </div>
               </div>
 
@@ -1047,6 +1162,189 @@ function TermografoModalContent({
   );
 }
 
+function DatosViajeModal({
+  viaje,
+  concesionarios,
+  onClose,
+  onSaved,
+}: {
+  viaje: Viaje;
+  concesionarios: Concesionario[];
+  onClose: () => void;
+  onSaved: (v: Viaje) => void;
+}) {
+  const [form, setForm] = useState({
+    linea_transportista_id: viaje.linea_transportista_id ?? "",
+    operador: viaje.operador ?? "",
+    modelo: viaje.modelo ?? "",
+    anio: viaje.anio ?? "",
+    placas_tracto: viaje.placas_tracto ?? "",
+    placas_caja: viaje.placas_caja ?? "",
+    contacto_unidad: viaje.contacto_unidad ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  function upd<K extends keyof typeof form>(k: K, val: string) {
+    setForm((f) => ({ ...f, [k]: val }));
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const body = {
+      linea_transportista_id: form.linea_transportista_id || null,
+      operador: form.operador.trim() || null,
+      modelo: form.modelo.trim() || null,
+      anio: form.anio.trim() || null,
+      placas_tracto: form.placas_tracto.trim() || null,
+      placas_caja: form.placas_caja.trim() || null,
+      contacto_unidad: form.contacto_unidad.trim() || null,
+    };
+    const res = await fetch(`/api/viajes/${viaje.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setSaving(false);
+    const json = await res.json();
+    if (!res.ok) {
+      toast.error(json.error || "Error al guardar");
+      return;
+    }
+    const sel = concesionarios
+      .flatMap((c) => (c.lineas_transportista ?? []).map((l) => ({ l, c })))
+      .find((x) => x.l.id === form.linea_transportista_id);
+    const linea = sel
+      ? { id: sel.l.id, nombre: sel.l.nombre, concesionario: { id: sel.c.id, nombre: sel.c.nombre } }
+      : null;
+    onSaved({ ...viaje, ...body, linea } as Viaje);
+    toast.success("Datos del viaje guardados");
+    onClose();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={save}
+        className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-lg overflow-y-auto max-h-[92vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-brand-50">
+          <div className="font-display font-bold text-brand-900">Datos del viaje</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs text-brand-400 hover:text-brand-700 transition"
+          >
+            Cancelar
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <label className="block text-xs font-medium text-brand-700">
+            Línea transportista
+            <select
+              value={form.linea_transportista_id}
+              onChange={(e) => upd("linea_transportista_id", e.target.value)}
+              className={`${fieldCls} bg-white mt-1`}
+            >
+              <option value="">— Sin línea —</option>
+              {concesionarios.map((c) => (
+                <optgroup key={c.id} label={c.nombre}>
+                  {(c.lineas_transportista ?? []).map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.nombre}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs font-medium text-brand-700">
+            Operador
+            <input
+              type="text"
+              value={form.operador}
+              onChange={(e) => upd("operador", e.target.value)}
+              className={`${fieldCls} mt-1`}
+            />
+          </label>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="block text-xs font-medium text-brand-700">
+              Modelo
+              <input
+                type="text"
+                value={form.modelo}
+                onChange={(e) => upd("modelo", e.target.value)}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Año
+              <input
+                type="text"
+                value={form.anio}
+                onChange={(e) => upd("anio", e.target.value)}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Placas tracto
+              <input
+                type="text"
+                value={form.placas_tracto}
+                onChange={(e) => upd("placas_tracto", e.target.value)}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Placas caja
+              <input
+                type="text"
+                value={form.placas_caja}
+                onChange={(e) => upd("placas_caja", e.target.value)}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+          </div>
+
+          <label className="block text-xs font-medium text-brand-700">
+            Contacto
+            <input
+              type="text"
+              value={form.contacto_unidad}
+              onChange={(e) => upd("contacto_unidad", e.target.value)}
+              className={`${fieldCls} mt-1`}
+            />
+          </label>
+        </div>
+
+        <div className="flex items-center gap-3 px-6 pb-5 pt-2 border-t border-brand-50">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-xl bg-brand-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60 transition shadow-sm"
+          >
+            {saving ? "Guardando…" : "Guardar"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 type ViajeEditData = {
   lugar_inicio: string;
   lugar_fin: string;
@@ -1090,6 +1388,10 @@ export function ViajeDetail({
 
   // Termógrafo modal
   const [showTermografoModal, setShowTermografoModal] = useState(false);
+
+  // Datos del viaje (unidad) modal
+  const [showDatosViaje, setShowDatosViaje] = useState(false);
+  const [concesionarios, setConcesionarios] = useState<Concesionario[]>([]);
 
   // OV form
   const [showOVForm, setShowOVForm] = useState(false);
@@ -1183,6 +1485,13 @@ export function ViajeDetail({
     if (transportistas.length === 0) {
       const j = await fetch("/api/transportistas").then((r) => r.json());
       setTransportistas(j.data ?? []);
+    }
+  }
+
+  async function loadConcesionarios() {
+    if (concesionarios.length === 0) {
+      const j = await fetch("/api/concesionarios").then((r) => r.json());
+      setConcesionarios(j.data ?? []);
     }
   }
 
@@ -1332,6 +1641,19 @@ export function ViajeDetail({
   return (
     <div className="space-y-6">
 
+      {/* Modal datos del viaje (unidad) */}
+      {showDatosViaje && (
+        <DatosViajeModal
+          viaje={viaje}
+          concesionarios={concesionarios}
+          onClose={() => setShowDatosViaje(false)}
+          onSaved={(v) => {
+            setViaje(v);
+            router.refresh();
+          }}
+        />
+      )}
+
       {/* Modal termógrafo */}
       {showTermografoModal && (
         <div
@@ -1432,7 +1754,7 @@ export function ViajeDetail({
       <div>
         <div className="flex items-center gap-3 mb-3">
           <span className="font-display font-semibold text-brand-900 text-sm uppercase tracking-widest">
-            Órdenes de Venta
+            Logística
           </span>
           <div className="flex-1 h-px bg-brand-100" />
           {!showOVFormPanel && (
@@ -1443,7 +1765,7 @@ export function ViajeDetail({
               }}
               className="rounded-xl bg-brand-900 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-800 transition shadow-sm"
             >
-              + Agregar OV
+              + Agregar Carga
             </button>
           )}
         </div>
@@ -1473,8 +1795,8 @@ export function ViajeDetail({
                 <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
                 <line x1="12" y1="22.08" x2="12" y2="12"/>
               </svg>
-              <p className="text-sm font-medium text-brand-600">Sin órdenes de venta</p>
-              <p className="text-xs text-brand-400 mt-1">Agrega la primera OV para este viaje.</p>
+              <p className="text-sm font-medium text-brand-600">Sin cargas</p>
+              <p className="text-xs text-brand-400 mt-1">Agrega la primera carga para este viaje.</p>
             </div>
           ) : (
             ordenes.length > 0 && (
@@ -1489,12 +1811,12 @@ export function ViajeDetail({
                           Carga
                         </th>
                         <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
-                          Entrega
+                          Cita
                         </th>
                         <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">
                           Producto
                         </th>
-                        <th className="text-left px-4 py-3 font-medium">Status</th>
+                        <th className="text-left px-4 py-3 font-medium">Estatus</th>
                         <th className="text-right px-4 py-3 font-medium"></th>
                       </tr>
                     </thead>
@@ -1518,10 +1840,14 @@ export function ViajeDetail({
                             <div className="text-brand-400">{ov.lugar_carga}</div>
                           </td>
                           <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
-                            <div>
-                              {ov.fecha_entrega}
-                              {ov.cita ? ` · ${to12h(ov.cita)}` : ""}
-                            </div>
+                            {ov.tiene_cita && ov.fecha_entrega ? (
+                              <div>
+                                {ov.fecha_entrega}
+                                {ov.cita ? ` · ${to12h(ov.cita)}` : ""}
+                              </div>
+                            ) : (
+                              <div className="text-brand-300">—</div>
+                            )}
                             {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                           </td>
                           <td className="px-4 py-3 hidden lg:table-cell text-xs text-brand-500">
@@ -1599,24 +1925,26 @@ export function ViajeDetail({
             <InfoCell label="Lugar de fin" value={viaje.lugar_fin} />
           )}
 
-          {editingViaje ? (
-            <EditCell label="Flete">
-              <select
-                value={viajeEdit.flete_cargo}
-                onChange={(e) => setViajeEdit((v) => ({ ...v, flete_cargo: e.target.value }))}
-                className={bareSelect}
+          <div className="rounded-xl border border-brand-100 bg-white px-4 py-3">
+            <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">Flete / Unidad</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-medium text-brand-900 min-w-0 truncate">
+                {viaje.linea?.concesionario?.nombre
+                  ? `${viaje.linea.concesionario.nombre}${viaje.linea?.nombre ? ` · ${viaje.linea.nombre}` : ""}`
+                  : viaje.flete_cargo ?? "—"}
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  await loadConcesionarios();
+                  setShowDatosViaje(true);
+                }}
+                className="text-xs font-semibold text-brand-700 hover:text-brand-900 transition shrink-0 whitespace-nowrap"
               >
-                <option value="">— Sin transportista —</option>
-                {transportistas.map((t) => (
-                  <option key={t.id} value={t.nombre}>
-                    {t.nombre}
-                  </option>
-                ))}
-              </select>
-            </EditCell>
-          ) : (
-            <InfoCell label="Flete" value={viaje.flete_cargo ?? "—"} />
-          )}
+                Datos del viaje
+              </button>
+            </div>
+          </div>
 
           {editingViaje ? (
             <EditCell label="Fecha de inicio">

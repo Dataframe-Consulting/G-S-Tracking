@@ -12,6 +12,7 @@ export default async function ViajesPage() {
     .select(`
       *,
       responsable:user_profiles!responsable_id(id, nombre, email),
+      linea:lineas_transportista!linea_transportista_id ( id, nombre, concesionario:concesionarios!concesionario_id ( id, nombre ) ),
       ordenes_venta ( id, ov_ref, cliente, cedi, status, fecha_entrega, producto_id, producto_combinacion_id, producto:productos(id, nombre, temp_min, temp_max), combo:producto_combinaciones!producto_combinacion_id(id, temp_min, temp_max, producto_a:productos!producto_a_id(id,nombre), producto_b:productos!producto_b_id(id,nombre)) )
     `)
     .order("numero", { ascending: false })

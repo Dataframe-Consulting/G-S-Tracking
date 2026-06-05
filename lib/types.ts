@@ -14,11 +14,11 @@ export const STATUS_VALUES: Status[] = [
 ];
 
 export const STATUS_LABELS: Record<Status, string> = {
-  PENDIENTE: "Pendiente",
-  EN_PREPARACION: "En preparación",
+  PENDIENTE: "Pendiente de carga",
+  EN_PREPARACION: "Proceso de carga",
   TRANSITO: "En tránsito",
   ENTREGADO: "Entregado",
-  RECHAZO_CALIDAD: "Rechazo calidad"
+  RECHAZO_CALIDAD: "Rechazo"
 };
 
 export const STATUS_CLASSES: Record<Status, string> = {
@@ -53,9 +53,13 @@ export interface OrdenVenta {
   cliente: string;
   fecha_carga: string;
   lugar_carga: string;
-  fecha_entrega: string;
+  fecha_entrega: string | null;
   lugar_entrega: string;
   cita: string | null;
+  tiene_cita: boolean;
+  po: string | null;
+  folio_cita: string | null;
+  factura_gys: string | null;
   status: Status;
   instrucciones: string;
   producto_id: string | null;
@@ -85,6 +89,13 @@ export interface Viaje {
   flete_cargo: string | null;
   termografo_id: string | null;
   responsable_id: string | null;
+  linea_transportista_id: string | null;
+  operador: string | null;
+  modelo: string | null;
+  anio: string | null;
+  placas_tracto: string | null;
+  placas_caja: string | null;
+  contacto_unidad: string | null;
   temp_actual: number | null;
   lat: number | null;
   lng: number | null;
@@ -95,6 +106,11 @@ export interface Viaje {
   ordenes_venta?: OrdenVenta[];
   responsable?: Responsable | null;
   termografos?: Termografo[];
+  linea?: {
+    id: string;
+    nombre: string;
+    concesionario?: { id: string; nombre: string } | null;
+  } | null;
 }
 
 export interface LecturaTemperatura {
@@ -163,6 +179,20 @@ export interface Transportista {
   nombre: string;
   contacto: string | null;
   created_at: string;
+}
+
+export interface LineaTransportista {
+  id: string;
+  concesionario_id: string;
+  nombre: string;
+  created_at: string;
+}
+
+export interface Concesionario {
+  id: string;
+  nombre: string;
+  created_at: string;
+  lineas_transportista?: LineaTransportista[];
 }
 
 export interface Auditoria {

@@ -64,6 +64,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     "flete_cargo",
     "termografo_id",
     "responsable_id",
+    "linea_transportista_id",
+    "operador",
+    "modelo",
+    "anio",
+    "placas_tracto",
+    "placas_caja",
+    "contacto_unidad",
   ];
   for (const k of allowed) if (k in body) update[k] = body[k];
 
