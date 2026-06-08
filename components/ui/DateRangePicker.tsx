@@ -12,6 +12,9 @@ interface Props {
   /** Fecha final del rango en formato AAAA-MM-DD ("" si vacío) */
   hasta: string;
   onChange: (desde: string, hasta: string) => void;
+  /** Muestra la X para vaciar el rango. En vistas con periodo obligatorio
+   *  (ej. dashboard) conviene false, porque vaciar no es un estado válido. */
+  clearable?: boolean;
 }
 
 /** Date → "AAAA-MM-DD" usando la fecha local (sin desfase de zona horaria) */
@@ -29,7 +32,7 @@ function fromStr(s: string): Date | undefined {
   return new Date(y, m - 1, d);
 }
 
-export function DateRangePicker({ desde, hasta, onChange }: Props) {
+export function DateRangePicker({ desde, hasta, onChange, clearable = true }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -76,7 +79,7 @@ export function DateRangePicker({ desde, hasta, onChange }: Props) {
           <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
         </svg>
         {label}
-        {hasValue && (
+        {clearable && hasValue && (
           <span
             role="button"
             tabIndex={0}

@@ -45,6 +45,7 @@ export function DashboardFilters({
           desde={fechaDesde}
           hasta={fechaHasta}
           onChange={updateRango}
+          clearable={false}
         />
       </label>
       <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">
