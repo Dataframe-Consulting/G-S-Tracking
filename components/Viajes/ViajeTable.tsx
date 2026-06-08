@@ -7,6 +7,8 @@ import toast from "react-hot-toast";
 import type { Viaje, OrdenVenta } from "@/lib/types";
 import { STATUS_LABELS, STATUS_CLASSES } from "@/lib/types";
 import { TempIndicator } from "@/components/Cargas/TempIndicator";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
+import { formatFecha } from "@/lib/fecha";
 
 function unique(values: (string | null | undefined)[]): string[] {
   return Array.from(new Set(values.filter(Boolean) as string[])).sort();
@@ -202,7 +204,7 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                       <div className="font-medium text-brand-900">{ov.cliente}</div>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-600">
-                      <div>{ov.fecha_entrega ?? "—"}</div>
+                      <div>{formatFecha(ov.fecha_entrega) || "—"}</div>
                       {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-500">
@@ -262,7 +264,8 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
 
   const [fOvRef, setFOvRef] = useState("");
   const [fFlete, setFFlete] = useState("");
-  const [fFecha, setFFecha] = useState("");
+  const [fDesde, setFDesde] = useState("");
+  const [fHasta, setFHasta] = useState("");
   const [fOrigen, setFOrigen] = useState("");
   const [fCliente, setFCliente] = useState("");
   const [fTermografo, setFTermografo] = useState("");
@@ -295,12 +298,13 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       .map(([value, label]) => ({ value, label }));
   }, [tabViajes]);
 
-  const anyFilter = fOvRef || fFlete || fFecha || fOrigen || fCliente || fTermografo || fResponsable;
+  const anyFilter = fOvRef || fFlete || fDesde || fHasta || fOrigen || fCliente || fTermografo || fResponsable;
 
   function clearFilters() {
     setFOvRef("");
     setFFlete("");
-    setFFecha("");
+    setFDesde("");
+    setFHasta("");
     setFOrigen("");
     setFCliente("");
     setFTermografo("");
@@ -311,7 +315,8 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
     const ovLower = fOvRef.toLowerCase();
     return tabViajes.filter((v) => {
       if (fFlete && v.flete_cargo !== fFlete) return false;
-      if (fFecha && v.fecha_inicio !== fFecha) return false;
+      if (fDesde && (!v.fecha_inicio || v.fecha_inicio < fDesde)) return false;
+      if (fHasta && (!v.fecha_inicio || v.fecha_inicio > fHasta)) return false;
       if (fOrigen && v.lugar_inicio !== fOrigen) return false;
       if (fTermografo && !v.termografo_id?.toLowerCase().includes(fTermografo.toLowerCase())) return false;
       if (fResponsable && v.responsable_id !== fResponsable) return false;
@@ -327,7 +332,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       }
       return true;
     });
-  }, [tabViajes, fOvRef, fFlete, fFecha, fOrigen, fCliente, fTermografo, fResponsable]);
+  }, [tabViajes, fOvRef, fFlete, fDesde, fHasta, fOrigen, fCliente, fTermografo, fResponsable]);
 
   const handleTermografoAssigned = useCallback(
     (viajeId: string, termografoId: string) => {
@@ -431,15 +436,13 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
             onChange={setFResponsable}
             options={responsablesOpts}
           />
-          <input
-            type="date"
-            value={fFecha}
-            onChange={(e) => setFFecha(e.target.value)}
-            className={`rounded-lg border px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 transition ${
-              fFecha
-                ? "border-brand-400 text-brand-900 font-medium"
-                : "border-brand-200 text-brand-400"
-            }`}
+          <DateRangePicker
+            desde={fDesde}
+            hasta={fHasta}
+            onChange={(d, h) => {
+              setFDesde(d);
+              setFHasta(h);
+            }}
           />
           <input
             type="text"
@@ -551,8 +554,8 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           )}
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell text-brand-600 tabular-nums text-xs">
-                          <div>{v.fecha_inicio}</div>
-                          <div className="text-brand-400">{v.fecha_fin}</div>
+                          <div>{formatFecha(v.fecha_inicio)}</div>
+                          <div className="text-brand-400">{formatFecha(v.fecha_fin)}</div>
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell text-brand-500 text-xs">
                           {v.linea?.concesionario?.nombre ?? v.flete_cargo ?? <span className="text-brand-300">—</span>}

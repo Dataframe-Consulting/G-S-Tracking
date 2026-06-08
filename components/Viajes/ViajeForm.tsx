@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { Transportista } from "@/lib/types";
 import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 const field =
   "mt-1 w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder:text-brand-300 transition";
@@ -88,7 +89,7 @@ export function ViajeForm({
           <CiudadCombobox
             value={form.lugar_inicio}
             onChange={(v) => update("lugar_inicio", v)}
-            placeholder="Hermosillo"
+            placeholder=""
             required
             className="mt-1"
             inputClassName={fieldInput}
@@ -99,7 +100,7 @@ export function ViajeForm({
           <CiudadCombobox
             value={form.lugar_fin}
             onChange={(v) => update("lugar_fin", v)}
-            placeholder="Tijuana"
+            placeholder=""
             required
             className="mt-1"
             inputClassName={fieldInput}
@@ -107,21 +108,19 @@ export function ViajeForm({
         </label>
         <label className="block text-sm font-medium text-brand-700">
           Fecha de inicio
-          <input
-            type="date"
+          <DatePicker
             required
             value={form.fecha_inicio}
-            onChange={(e) => update("fecha_inicio", e.target.value)}
+            onChange={(v) => update("fecha_inicio", v)}
             className={field}
           />
         </label>
         <label className="block text-sm font-medium text-brand-700">
           Fecha de fin
-          <input
-            type="date"
+          <DatePicker
             required
             value={form.fecha_fin}
-            onChange={(e) => update("fecha_fin", e.target.value)}
+            onChange={(v) => update("fecha_fin", v)}
             className={field}
           />
         </label>

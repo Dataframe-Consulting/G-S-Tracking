@@ -9,6 +9,7 @@ dist
 .DS_Store
 .vercel
 next-env.d.ts
+tsconfig.tsbuildinfo
 
 # Local-only / per-developer files
 CLAUDE.md

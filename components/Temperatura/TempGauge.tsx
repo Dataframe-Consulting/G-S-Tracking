@@ -1,4 +1,4 @@
-import { cToF } from "@/lib/temperature";
+import { cToF, tempEstado } from "@/lib/temperature";
 
 export function TempGauge({
   value,
@@ -21,13 +21,17 @@ export function TempGauge({
   const minPct = ((minF - lower) / total) * 100;
   const maxPct = ((maxF - lower) / total) * 100;
 
-  const out = valueF != null && (valueF < minF || valueF > maxF);
+  const estado = tempEstado(value, min, max);
+  const valueColor =
+    estado === "alta" ? "text-red-600" : estado === "baja" ? "text-blue-600" : "text-brand-900";
+  const markerColor =
+    estado === "alta" ? "bg-red-500" : estado === "baja" ? "bg-blue-500" : "bg-brand-900";
 
   return (
     <div className="rounded-xl border border-brand-100 bg-white px-5 py-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-medium text-brand-400">Temperatura actual</span>
-        <span className={`text-2xl font-bold tabular-nums ${out ? "text-red-600" : "text-brand-700"}`}>
+        <span className={`text-2xl font-bold tabular-nums ${valueColor}`}>
           {valueF == null ? "—" : `${valueF.toFixed(1)}°F`}
         </span>
       </div>
@@ -39,7 +43,7 @@ export function TempGauge({
         />
         {valueF != null && (
           <div
-            className={`absolute -top-1 -bottom-1 w-[3px] rounded-full ${out ? "bg-red-500" : "bg-brand-900"}`}
+            className={`absolute -top-1 -bottom-1 w-[3px] rounded-full ${markerColor}`}
             style={{ left: `calc(${pct}% - 1.5px)` }}
           />
         )}

@@ -25,9 +25,12 @@ import { TempChart } from "@/components/Temperatura/TempChart";
 import { AlertaBanner } from "@/components/Alertas/AlertaBanner";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { ModificacionesSection } from "@/components/Viajes/ModificacionesSection";
-import { cToF } from "@/lib/temperature";
+import { cToF, tempEstado } from "@/lib/temperature";
 import { to12h } from "@/lib/time";
+import { formatFecha, formatFechaHora } from "@/lib/fecha";
+import { viajeConcluido } from "@/lib/viaje";
 
 const MapaTracker = dynamic(() => import("@/components/Mapa/MapaTracker"), { ssr: false });
 
@@ -351,11 +354,10 @@ function OVFormPanel({
 
         <label className="block text-xs font-medium text-brand-700">
           Fecha de carga *
-          <input
-            type="date"
+          <DatePicker
             required
             value={form.fecha_carga}
-            onChange={(e) => upd("fecha_carga", e.target.value)}
+            onChange={(v) => upd("fecha_carga", v)}
             className={`${fieldCls} mt-1`}
           />
         </label>
@@ -401,7 +403,7 @@ function OVFormPanel({
             <input
               type="text"
               required
-              placeholder="Hermosillo"
+              placeholder=""
               value={form.lugar_carga}
               onChange={(e) => upd("lugar_carga", e.target.value)}
               className={`${fieldCls} mt-1`}
@@ -522,10 +524,9 @@ function OVFormPanel({
             </label>
             <label className="block text-xs font-medium text-brand-700">
               Fecha de la cita
-              <input
-                type="date"
+              <DatePicker
                 value={form.fecha_entrega}
-                onChange={(e) => upd("fecha_entrega", e.target.value)}
+                onChange={(v) => upd("fecha_entrega", v)}
                 className={`${fieldCls} mt-1`}
               />
             </label>
@@ -788,11 +789,10 @@ function OVDetailModal({
               <div className="grid sm:grid-cols-3 gap-3">
                 <label className="block text-xs font-medium text-brand-700">
                   Fecha carga *
-                  <input
-                    type="date"
+                  <DatePicker
                     required
                     value={form.fecha_carga}
-                    onChange={(e) => upd("fecha_carga", e.target.value)}
+                    onChange={(v) => upd("fecha_carga", v)}
                     className={`${fieldCls} mt-1`}
                   />
                 </label>
@@ -801,7 +801,7 @@ function OVDetailModal({
                   <input
                     type="text"
                     required
-                    placeholder="Hermosillo"
+                    placeholder=""
                     value={form.lugar_carga}
                     onChange={(e) => upd("lugar_carga", e.target.value)}
                     className={`${fieldCls} mt-1`}
@@ -924,10 +924,9 @@ function OVDetailModal({
                     </label>
                     <label className="block text-xs font-medium text-brand-700">
                       Fecha de la cita
-                      <input
-                        type="date"
+                      <DatePicker
                         value={form.fecha_entrega}
-                        onChange={(e) => upd("fecha_entrega", e.target.value)}
+                        onChange={(v) => upd("fecha_entrega", v)}
                         className={`${fieldCls} mt-1`}
                       />
                     </label>
@@ -999,7 +998,7 @@ function OVDetailModal({
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3">
                   <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">Carga</div>
-                  <div className="text-sm font-medium text-brand-900">{ov.fecha_carga}</div>
+                  <div className="text-sm font-medium text-brand-900">{formatFecha(ov.fecha_carga)}</div>
                   <div className="text-xs text-brand-500 mt-0.5">{ov.lugar_carga}</div>
                 </div>
                 <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3">
@@ -1008,7 +1007,7 @@ function OVDetailModal({
                     <div className="space-y-0.5">
                       {ov.fecha_entrega && (
                         <div className="text-sm font-medium text-brand-900">
-                          {ov.fecha_entrega}{ov.cita ? ` · ${to12h(ov.cita)}` : ""}
+                          {formatFecha(ov.fecha_entrega)}{ov.cita ? ` · ${to12h(ov.cita)}` : ""}
                         </div>
                       )}
                       {ov.po && <div className="text-xs text-brand-500">PO: {ov.po}</div>}
@@ -1391,6 +1390,7 @@ export function ViajeDetail({
 
   // Datos del viaje (unidad) modal
   const [showDatosViaje, setShowDatosViaje] = useState(false);
+  const [showAlerta, setShowAlerta] = useState(false);
   const [concesionarios, setConcesionarios] = useState<Concesionario[]>([]);
 
   // OV form
@@ -1451,6 +1451,16 @@ export function ViajeDetail({
     if (latest.length === 0) return null;
     return latest.reduce((a, b) => a + b, 0) / latest.length;
   }, [termografos, lecturasByTermografo]);
+
+  // Estado de la temperatura de carga respecto al rango del producto.
+  // Mismo criterio de color que la tabla y el gauge (helper único tempEstado):
+  //   alta = rojo · baja = azul · ok = neutro
+  const tempCargaEstado = tempEstado(tempDeCarga, tempMin, tempMax);
+  const tempCargaFuera = tempCargaEstado !== "ok";
+
+  // Monitoreo congelado: todas las OVs entregadas (la temp mostrada es la última, no en vivo).
+  // Se calcula desde `ordenes` (estado en vivo) para reflejarse al instante al cambiar status.
+  const monitoreoFinalizado = viajeConcluido(ordenes);
 
   async function loadFormData() {
     const fetches = [];
@@ -1589,6 +1599,12 @@ export function ViajeDetail({
     });
     if (res.ok) {
       setOrdenes((prev) => prev.map((o) => (o.id === ov.id ? { ...o, status: next } : o)));
+      // Aplicar de inmediato el congelado/reactivación del monitoreo sin esperar al
+      // polling de 3 min: corre un sync y refresca. La suscripción realtime refleja
+      // el cambio de alerta_activa al instante.
+      fetch(`/api/copeland/sync?viajeId=${viaje.id}`, { method: "POST" })
+        .catch(() => void 0)
+        .finally(() => router.refresh());
     } else {
       toast.error("Error al actualizar status");
     }
@@ -1654,6 +1670,38 @@ export function ViajeDetail({
         />
       )}
 
+      {/* Modal alerta de temperatura */}
+      {showAlerta && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => setShowAlerta(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-md overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-brand-50">
+              <div className="font-display font-bold text-brand-900">Alerta de temperatura</div>
+              <button
+                type="button"
+                onClick={() => setShowAlerta(false)}
+                className="text-xs text-brand-400 hover:text-brand-700 transition"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="px-6 py-5">
+              <AlertaBanner
+                active={tempCargaFuera}
+                tempActual={tempDeCarga}
+                tempMin={tempMin}
+                tempMax={tempMax}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal termógrafo */}
       {showTermografoModal && (
         <div
@@ -1711,7 +1759,7 @@ export function ViajeDetail({
             {viaje.lugar_fin}
           </h1>
           <div className="mt-1 text-sm text-brand-500">
-            {viaje.fecha_inicio} — {viaje.fecha_fin}
+            {formatFecha(viaje.fecha_inicio)} — {formatFecha(viaje.fecha_fin)}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -1742,13 +1790,6 @@ export function ViajeDetail({
           )}
         </div>
       </div>
-
-      <AlertaBanner
-        active={!!viaje.alerta_activa}
-        tempActual={viaje.temp_actual != null ? Number(viaje.temp_actual) : null}
-        tempMin={tempMin}
-        tempMax={tempMax}
-      />
 
       {/* Órdenes de Venta */}
       <div>
@@ -1836,13 +1877,13 @@ export function ViajeDetail({
                             <div className="font-medium text-brand-900">{ov.cliente}</div>
                           </td>
                           <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
-                            <div>{ov.fecha_carga}</div>
+                            <div>{formatFecha(ov.fecha_carga)}</div>
                             <div className="text-brand-400">{ov.lugar_carga}</div>
                           </td>
                           <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
                             {ov.tiene_cita && ov.fecha_entrega ? (
                               <div>
-                                {ov.fecha_entrega}
+                                {formatFecha(ov.fecha_entrega)}
                                 {ov.cita ? ` · ${to12h(ov.cita)}` : ""}
                               </div>
                             ) : (
@@ -1904,7 +1945,7 @@ export function ViajeDetail({
               <CiudadCombobox
                 value={viajeEdit.lugar_inicio}
                 onChange={(v) => setViajeEdit((prev) => ({ ...prev, lugar_inicio: v }))}
-                placeholder="Hermosillo"
+                placeholder=""
                 inputClassName={bareInput}
               />
             </EditCell>
@@ -1917,7 +1958,7 @@ export function ViajeDetail({
               <CiudadCombobox
                 value={viajeEdit.lugar_fin}
                 onChange={(v) => setViajeEdit((prev) => ({ ...prev, lugar_fin: v }))}
-                placeholder="Tijuana"
+                placeholder=""
                 inputClassName={bareInput}
               />
             </EditCell>
@@ -1948,28 +1989,28 @@ export function ViajeDetail({
 
           {editingViaje ? (
             <EditCell label="Fecha de inicio">
-              <input
-                type="date"
+              <DatePicker
+                required
                 value={viajeEdit.fecha_inicio}
-                onChange={(e) => setViajeEdit((v) => ({ ...v, fecha_inicio: e.target.value }))}
+                onChange={(v) => setViajeEdit((prev) => ({ ...prev, fecha_inicio: v }))}
                 className={bareInput}
               />
             </EditCell>
           ) : (
-            <InfoCell label="Fecha de inicio" value={viaje.fecha_inicio} />
+            <InfoCell label="Fecha de inicio" value={formatFecha(viaje.fecha_inicio)} />
           )}
 
           {editingViaje ? (
             <EditCell label="Fecha de fin">
-              <input
-                type="date"
+              <DatePicker
+                required
                 value={viajeEdit.fecha_fin}
-                onChange={(e) => setViajeEdit((v) => ({ ...v, fecha_fin: e.target.value }))}
+                onChange={(v) => setViajeEdit((prev) => ({ ...prev, fecha_fin: v }))}
                 className={bareInput}
               />
             </EditCell>
           ) : (
-            <InfoCell label="Fecha de fin" value={viaje.fecha_fin} />
+            <InfoCell label="Fecha de fin" value={formatFecha(viaje.fecha_fin)} />
           )}
 
           {/* Responsable */}
@@ -2053,24 +2094,46 @@ export function ViajeDetail({
             label="Última lectura"
             value={
               viaje.ultima_lectura
-                ? new Date(viaje.ultima_lectura).toLocaleString("es-MX")
+                ? formatFechaHora(viaje.ultima_lectura)
                 : "—"
             }
           />
 
           {/* Temperatura de carga */}
           {termografos.length > 0 && (
-            <div className="rounded-xl border border-brand-100 bg-white px-4 py-3 flex flex-col items-center justify-center text-center">
+            <div className="relative rounded-xl border border-brand-100 bg-white px-4 py-3 flex flex-col items-center justify-center text-center">
               <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">
                 Temperatura de carga
               </div>
-              <div className="text-2xl font-bold text-brand-900">
+              <div
+                className={`text-2xl font-bold ${
+                  tempCargaEstado === "alta"
+                    ? "text-red-700"
+                    : tempCargaEstado === "baja"
+                      ? "text-blue-700"
+                      : "text-brand-900"
+                }`}
+              >
                 {tempDeCarga != null ? `${(cToF(tempDeCarga) as number).toFixed(1)}°F` : "—"}
               </div>
               {termografos.length > 1 && (
                 <div className="text-[11px] text-brand-400 mt-1">
                   Promedio de {termografos.length} termógrafos
                 </div>
+              )}
+              {monitoreoFinalizado && (
+                <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-brand-600">
+                  Monitoreo finalizado · entregado
+                </div>
+              )}
+              {tempCargaFuera && (
+                <button
+                  type="button"
+                  onClick={() => setShowAlerta(true)}
+                  className="absolute bottom-2 right-3 text-xs font-semibold text-brand-700 hover:text-brand-900 transition"
+                >
+                  Ver más
+                </button>
               )}
             </div>
           )}
@@ -2257,7 +2320,7 @@ export function ViajeDetail({
                         )}
                       </div>
                       <div className="text-xs text-brand-400 mt-0.5">
-                        {new Date(a.created_at).toLocaleString("es-MX")} · {a.enviado_a}
+                        {formatFechaHora(a.created_at)} · {a.enviado_a}
                       </div>
                     </div>
                     {a.whatsapp_sid ? (

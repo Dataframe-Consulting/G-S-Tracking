@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CIUDADES_MEXICO } from "@/lib/ciudades-mexico";
+import { CIUDADES } from "@/lib/ciudades";
 
 interface Props {
   value: string;
@@ -29,7 +29,7 @@ export function CiudadCombobox({
   const filtered =
     value.length === 0
       ? []
-      : CIUDADES_MEXICO.filter((c) =>
+      : CIUDADES.filter((c) =>
           c.toLowerCase().includes(value.toLowerCase())
         ).slice(0, 9);
 

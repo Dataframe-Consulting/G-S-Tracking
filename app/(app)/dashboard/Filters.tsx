@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Producto } from "@/lib/types";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
 
 const input =
   "rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 text-brand-900";
@@ -27,24 +28,23 @@ export function DashboardFilters({
     router.push(`/dashboard?${next.toString()}`);
   }
 
+  function updateRango(desde: string, hasta: string) {
+    const next = new URLSearchParams(params.toString());
+    if (desde) next.set("fecha_desde", desde);
+    else next.delete("fecha_desde");
+    if (hasta) next.set("fecha_hasta", hasta);
+    else next.delete("fecha_hasta");
+    router.push(`/dashboard?${next.toString()}`);
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-3 bg-white border border-brand-100 rounded-2xl px-4 py-3 shadow-sm">
       <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">
-        Desde
-        <input
-          type="date"
-          value={fechaDesde}
-          onChange={(e) => updateParam("fecha_desde", e.target.value)}
-          className={input}
-        />
-      </label>
-      <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">
-        Hasta
-        <input
-          type="date"
-          value={fechaHasta}
-          onChange={(e) => updateParam("fecha_hasta", e.target.value)}
-          className={input}
+        Periodo
+        <DateRangePicker
+          desde={fechaDesde}
+          hasta={fechaHasta}
+          onChange={updateRango}
         />
       </label>
       <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">

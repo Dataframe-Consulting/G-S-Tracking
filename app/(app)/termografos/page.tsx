@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { Termografo } from "@/lib/types";
+import { formatFechaHora } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,7 @@ export default async function TermografosPage() {
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-500">
                   {t.ultima_actividad
-                    ? new Date(t.ultima_actividad).toLocaleString("es-MX")
+                    ? formatFechaHora(t.ultima_actividad)
                     : "—"}
                 </td>
               </tr>

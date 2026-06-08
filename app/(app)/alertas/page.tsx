@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { cToF } from "@/lib/temperature";
+import { formatFechaHora } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export default async function AlertasPage() {
                 rows.map((a) => (
                   <tr key={a.id} className="hover:bg-brand-50/60 transition-colors">
                     <td className="px-4 py-3 text-xs text-brand-500 tabular-nums whitespace-nowrap">
-                      {new Date(a.created_at).toLocaleString("es-MX")}
+                      {formatFechaHora(a.created_at)}
                     </td>
                     <td className="px-4 py-3 font-medium">
                       {a.tipo === "TEMP_ALTA" ? (

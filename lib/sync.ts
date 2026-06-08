@@ -2,11 +2,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSensorReadings, simulateDeviceReadings } from "./copeland";
 import type { CopelandReading } from "./copeland";
 import { checkAlertas } from "./alertas";
+import { viajeConcluido } from "./viaje";
+import type { Status } from "./types";
 
 type ViajeRow = {
   id: string;
   termografo_ids: string[];
+  alerta_activa: boolean;
   ordenes_venta: Array<{
+    status: Status;
     produto: { temp_min: number; temp_max: number } | null;
   }>;
 };
@@ -90,7 +94,7 @@ async function loadViajes(
 ): Promise<ViajeRow[]> {
   let q = supabase
     .from("termografos")
-    .select(`id, viaje_id, viajes!inner(id, ordenes_venta(produto:productos(temp_min, temp_max)))`)
+    .select(`id, viaje_id, viajes!inner(id, alerta_activa, ordenes_venta(status, produto:productos(temp_min, temp_max)))`)
     .eq("asignado", true);
 
   if (viajeId) q = q.eq("viaje_id", viajeId);
@@ -110,6 +114,7 @@ async function loadViajes(
     if (!t.viaje_id) continue;
     const viajeRaw = (Array.isArray(t.viajes) ? t.viajes[0] : t.viajes) as {
       id: string;
+      alerta_activa: boolean;
       ordenes_venta: ViajeRow["ordenes_venta"];
     } | null;
     if (!viajeRaw) continue;
@@ -120,7 +125,8 @@ async function loadViajes(
       map.set(t.viaje_id, {
         id: t.viaje_id,
         termografo_ids: [t.id],
-        ordenes_venta: viajeRaw.ordenes_venta,
+        alerta_activa: !!viajeRaw.alerta_activa,
+        ordenes_venta: viajeRaw.ordenes_venta ?? [],
       });
     }
   }
@@ -128,15 +134,35 @@ async function loadViajes(
 }
 
 export async function runSync(supabase: SupabaseClient, viajeId?: string | null) {
-  const viajes = await loadViajes(supabase, viajeId);
-  if (viajes.length === 0) return { updated: 0 };
+  const todos = await loadViajes(supabase, viajeId);
+  if (todos.length === 0) return { updated: 0 };
+
+  // Candado: un viaje con TODAS sus OVs en Entregado se considera concluido →
+  // se congela (no se registran lecturas nuevas ni se evalúan alertas).
+  const concluidos = todos.filter((v) => viajeConcluido(v.ordenes_venta));
+  const activos = todos.filter((v) => !viajeConcluido(v.ordenes_venta));
+
+  // Al concluir, limpiar la alerta que hubiera quedado activa (solo los que aún
+  // la tengan encendida, para no escribir de más en cada corrida).
+  const limpiarAlerta = concluidos.filter((v) => v.alerta_activa).map((v) => v.id);
+  if (limpiarAlerta.length > 0) {
+    await supabase
+      .from("viajes")
+      .update({ alerta_activa: false, updated_at: new Date().toISOString() })
+      .in("id", limpiarAlerta);
+  }
+
+  if (activos.length === 0) {
+    return { updated: 0, congelados: concluidos.length };
+  }
 
   const simulate = process.env.COPELAND_SIMULATE !== "false";
 
-  if (simulate) {
-    return runSimSync(supabase, viajes);
-  }
-  return runRealSync(supabase, viajes, viajeId ?? null);
+  const res = simulate
+    ? await runSimSync(supabase, activos)
+    : await runRealSync(supabase, activos, viajeId ?? null);
+
+  return { ...res, congelados: concluidos.length };
 }
 
 // ---------------------------------------------------------------------------
