@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { defineTrip, closeTrip } from "@/lib/copeland";
+import { defineTrip, closeTrip, copelandTripId } from "@/lib/copeland";
 import { logAuditMany } from "@/lib/audit";
 
 const VIAJE_FIELD_LABELS: Record<string, string> = {
@@ -90,7 +90,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     // Desasignar el anterior: cerrar trip en Copeland + actualizar DB
     if (oldTrackerId) {
-      await closeTrip(params.id, oldTrackerId);
+      await closeTrip(copelandTripId(prev?.numero ?? params.id, oldTrackerId), oldTrackerId);
       await supabase
         .from("termografos")
         .update({ asignado: false, viaje_id: null })
@@ -112,13 +112,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
       // DefineTrip es best-effort: no bloqueamos si falla
       defineTrip({
-        tripId: params.id,
+        tripId: copelandTripId(prev?.numero ?? params.id, newTrackerId),
         trackerId: newTrackerId,
         originName: lugarInicio,
         destinationName: lugarFin,
         scheduledStartUTC: fechaInicio ? `${fechaInicio}T00:00:00` : null,
         scheduledEndUTC: fechaFin ? `${fechaFin}T23:59:59` : null,
-      }).catch((e) => console.error("DefineTrip error:", e));
+      })
+        .then((r) => {
+          if (!r.success) console.error("DefineTrip rechazado:", r.error);
+        })
+        .catch((e) => console.error("DefineTrip error:", e));
     }
   }
 
@@ -152,7 +156,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const supabase = createServerSupabase();
   const { data: prev } = await supabase
     .from("viajes")
-    .select("termografo_id")
+    .select("termografo_id, numero")
     .eq("id", params.id)
     .single();
 
@@ -160,7 +164,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   if (prev?.termografo_id) {
-    closeTrip(params.id, prev.termografo_id).catch(() => {});
+    closeTrip(copelandTripId(prev.numero ?? params.id, prev.termografo_id), prev.termografo_id).catch(() => {});
     await supabase
       .from("termografos")
       .update({ asignado: false, viaje_id: null })

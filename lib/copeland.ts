@@ -79,7 +79,7 @@ function copelandPost(
 // ---------------------------------------------------------------------------
 
 export interface DefineTripParams {
-  tripId: string;            // Usamos el viaje UUID como TripID en Copeland
+  tripId: string;            // TripID en Copeland (un trip por tracker)
   trackerId: string;         // Número de serie del dispositivo Copeland
   originName: string;        // lugar_inicio del viaje
   destinationName: string;   // lugar_fin del viaje
@@ -87,6 +87,15 @@ export interface DefineTripParams {
   scheduledEndUTC?: string | null;
   tempLowCritical?: number | null;
   tempHighCritical?: number | null;
+}
+
+/**
+ * TripID de Copeland. Copeland es estrictamente 1 trip = 1 tracker, así que
+ * un viaje con varios termógrafos necesita un TripID distinto por tracker.
+ * Formato `${numero}/${trackerId}` (estilo prefix/serial de Copeland, ≤50 chars).
+ */
+export function copelandTripId(viajeNumero: number | string, trackerId: string): string {
+  return `${viajeNumero}/${trackerId}`;
 }
 
 export async function defineTrip(
@@ -133,6 +142,19 @@ export async function defineTrip(
     const data = JSON.parse(res.body);
     if (data.ErrorCode !== 0) {
       return { success: false, error: data.ErrorDescription ?? `ErrorCode ${data.ErrorCode}` };
+    }
+    // Copeland puede responder ErrorCode 0 pero rechazar el tracker dentro de
+    // TripStatusList (p.ej. 3201 "Cannot change Tracker", 3102 "already assigned").
+    const rechazo = Array.isArray(data.TripStatusList)
+      ? (data.TripStatusList as Array<{ ReturnCode?: number; ExceptionMessage?: string }>).find(
+          (t) => (t.ReturnCode != null && t.ReturnCode !== 0) || t.ExceptionMessage
+        )
+      : null;
+    if (rechazo) {
+      return {
+        success: false,
+        error: rechazo.ExceptionMessage ?? `ReturnCode ${rechazo.ReturnCode}`,
+      };
     }
     return { success: true };
   } catch (e) {

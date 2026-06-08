@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { closeTrip } from "@/lib/copeland";
+import { closeTrip, copelandTripId } from "@/lib/copeland";
 
 export async function DELETE(
   _req: Request,
@@ -8,7 +8,16 @@ export async function DELETE(
 ) {
   const supabase = createServerSupabase();
 
-  closeTrip(params.id, params.termografoId).catch(() => {});
+  const { data: viaje } = await supabase
+    .from("viajes")
+    .select("numero")
+    .eq("id", params.id)
+    .single();
+
+  closeTrip(
+    copelandTripId(viaje?.numero ?? params.id, params.termografoId),
+    params.termografoId
+  ).catch(() => {});
 
   await supabase
     .from("termografos")

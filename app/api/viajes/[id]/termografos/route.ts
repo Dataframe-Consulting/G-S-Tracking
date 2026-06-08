@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { defineTrip } from "@/lib/copeland";
+import { defineTrip, copelandTripId } from "@/lib/copeland";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const { data: viaje } = await supabase
     .from("viajes")
-    .select("id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin")
+    .select("id, numero, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin")
     .eq("id", params.id)
     .single();
 
@@ -50,13 +50,17 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   );
 
   defineTrip({
-    tripId: params.id,
+    tripId: copelandTripId(viaje.numero, id),
     trackerId: id,
     originName: viaje.lugar_inicio,
     destinationName: viaje.lugar_fin,
     scheduledStartUTC: viaje.fecha_inicio ? `${viaje.fecha_inicio}T00:00:00` : null,
     scheduledEndUTC: viaje.fecha_fin ? `${viaje.fecha_fin}T23:59:59` : null,
-  }).catch((e) => console.error("DefineTrip error:", e));
+  })
+    .then((r) => {
+      if (!r.success) console.error("DefineTrip rechazado:", r.error);
+    })
+    .catch((e) => console.error("DefineTrip error:", e));
 
   const { data: termografos } = await supabase
     .from("termografos")
