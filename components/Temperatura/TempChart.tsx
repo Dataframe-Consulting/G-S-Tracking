@@ -35,7 +35,7 @@ export function TempChart({
   const maxF = cToF(max) as number;
 
   const data = [...lecturas]
-    .reverse()
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     .map((l) => ({
       t: new Date(l.timestamp).toLocaleTimeString("es-MX", {
         hour: "2-digit",

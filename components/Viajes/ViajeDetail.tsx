@@ -1635,7 +1635,15 @@ export function ViajeDetail({
         },
         (payload) => {
           const row = payload.new as LecturaTemperatura;
-          setLecturas((prev) => [row, ...prev].slice(0, 50));
+          setLecturas((prev) => {
+            if (prev.some((l) => l.id === row.id)) return prev;
+            return [row, ...prev]
+              .sort(
+                (a, b) =>
+                  new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+              )
+              .slice(0, 150);
+          });
         }
       )
       .subscribe();
@@ -2266,6 +2274,9 @@ export function ViajeDetail({
                   <tr>
                     <th className="text-left px-4 py-2">Hora</th>
                     <th className="text-left px-4 py-2">Temp</th>
+                    {termografos.length > 1 && (
+                      <th className="text-left px-4 py-2">Termógrafo</th>
+                    )}
                     <th className="text-left px-4 py-2 hidden sm:table-cell">Ubicación</th>
                   </tr>
                 </thead>
@@ -2282,6 +2293,11 @@ export function ViajeDetail({
                       >
                         {(cToF(Number(l.temperatura)) as number).toFixed(1)}°F
                       </td>
+                      {termografos.length > 1 && (
+                        <td className="px-4 py-2 text-xs font-mono text-brand-500">
+                          {l.termografo_id}
+                        </td>
+                      )}
                       <td className="px-4 py-2 text-xs text-brand-400 hidden sm:table-cell">
                         {l.lat != null && l.lng != null
                           ? <GeoCell lat={Number(l.lat)} lng={Number(l.lng)} />
