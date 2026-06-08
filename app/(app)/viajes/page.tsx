@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
-import type { Viaje } from "@/lib/types";
+import type { Viaje, Termografo } from "@/lib/types";
 import { ViajeTable } from "@/components/Viajes/ViajeTable";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,31 @@ export default async function ViajesPage() {
     .order("numero", { ascending: false })
     .limit(200);
 
-  const viajes = (data ?? []) as Viaje[];
+  const viajesData = (data ?? []) as Viaje[];
+
+  // Termógrafos asignados (modelo multi, atados por viaje_id). Se cargan aparte
+  // para evitar la ambigüedad de las dos relaciones viajes↔termografos.
+  const viajeIds = viajesData.map((v) => v.id);
+  const { data: termosData } = viajeIds.length
+    ? await supabase
+        .from("termografos")
+        .select("id, nombre, asignado, viaje_id, ultima_actividad")
+        .eq("asignado", true)
+        .in("viaje_id", viajeIds)
+    : { data: [] as Termografo[] };
+
+  const termosByViaje = new Map<string, Termografo[]>();
+  for (const t of (termosData ?? []) as Termografo[]) {
+    if (!t.viaje_id) continue;
+    const list = termosByViaje.get(t.viaje_id) ?? [];
+    list.push(t);
+    termosByViaje.set(t.viaje_id, list);
+  }
+
+  const viajes: Viaje[] = viajesData.map((v) => ({
+    ...v,
+    termografos: termosByViaje.get(v.id) ?? [],
+  }));
 
   return (
     <div className="space-y-6">

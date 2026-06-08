@@ -318,7 +318,13 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       if (fDesde && (!v.fecha_inicio || v.fecha_inicio < fDesde)) return false;
       if (fHasta && (!v.fecha_inicio || v.fecha_inicio > fHasta)) return false;
       if (fOrigen && v.lugar_inicio !== fOrigen) return false;
-      if (fTermografo && !v.termografo_id?.toLowerCase().includes(fTermografo.toLowerCase())) return false;
+      if (
+        fTermografo &&
+        !(v.termografos ?? []).some((t) =>
+          t.id.toLowerCase().includes(fTermografo.toLowerCase())
+        )
+      )
+        return false;
       if (fResponsable && v.responsable_id !== fResponsable) return false;
       if (fOvRef) {
         const match = v.ordenes_venta?.some((o) =>
@@ -335,10 +341,9 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
   }, [tabViajes, fOvRef, fFlete, fDesde, fHasta, fOrigen, fCliente, fTermografo, fResponsable]);
 
   const handleTermografoAssigned = useCallback(
-    (viajeId: string, termografoId: string) => {
-      setViajes((prev) =>
-        prev.map((v) => (v.id === viajeId ? { ...v, termografo_id: termografoId } : v))
-      );
+    (_viajeId: string, _termografoId: string) => {
+      // El PATCH ya escribió en la tabla `termografos`; refrescamos para que la
+      // vista (que ahora lee de ahí) muestre el termógrafo recién asignado.
       router.refresh();
     },
     [router]
@@ -564,10 +569,14 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           className="px-4 py-3 hidden lg:table-cell"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {v.termografo_id ? (
-                            <span className="font-mono text-xs text-brand-700">
-                              {v.termografo_id}
-                            </span>
+                          {(v.termografos ?? []).length > 0 ? (
+                            <div className="flex flex-col gap-0.5">
+                              {(v.termografos ?? []).map((t) => (
+                                <span key={t.id} className="font-mono text-xs text-brand-700">
+                                  {t.id}
+                                </span>
+                              ))}
+                            </div>
                           ) : (
                             <button
                               onClick={() => setModalViajeId(v.id)}
