@@ -97,6 +97,8 @@ export interface Viaje {
   placas_caja: string | null;
   contacto_unidad: string | null;
   temp_actual: number | null;
+  /** Calculado (no en BD): promedio de la última lectura de cada termógrafo asignado */
+  temp_carga?: number | null;
   lat: number | null;
   lng: number | null;
   ultima_lectura: string | null;

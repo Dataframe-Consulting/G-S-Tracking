@@ -56,7 +56,30 @@ async function persistMultipleReadings(
     }))
   );
 
-  await supabase.from("lecturas_temperatura").insert(rows);
+  // Dedup: no reinsertar lecturas que ya existen (mismo termógrafo + timestamp).
+  // Importante para el backfill y para "Sincronizar ahora", que reescanean el stream.
+  if (rows.length > 0) {
+    const termIds = [...new Set(rows.map((r) => r.termografo_id))];
+    const times = rows.map((r) => new Date(r.timestamp).getTime());
+    const minISO = new Date(Math.min(...times)).toISOString();
+    const maxISO = new Date(Math.max(...times)).toISOString();
+    const { data: existentes } = await supabase
+      .from("lecturas_temperatura")
+      .select("termografo_id, timestamp")
+      .eq("viaje_id", viaje.id)
+      .in("termografo_id", termIds)
+      .gte("timestamp", minISO)
+      .lte("timestamp", maxISO);
+    const vistos = new Set(
+      (existentes ?? []).map((e) => `${e.termografo_id}|${new Date(e.timestamp).getTime()}`)
+    );
+    const nuevas = rows.filter(
+      (r) => !vistos.has(`${r.termografo_id}|${new Date(r.timestamp).getTime()}`)
+    );
+    if (nuevas.length > 0) {
+      await supabase.from("lecturas_temperatura").insert(nuevas);
+    }
+  }
 
   // Average of each device's latest reading
   const latestTemps = devices.map(({ readings }) => readings.at(-1)!.temperature);

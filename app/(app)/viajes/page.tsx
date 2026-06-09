@@ -39,10 +39,40 @@ export default async function ViajesPage() {
     termosByViaje.set(t.viaje_id, list);
   }
 
-  const viajes: Viaje[] = viajesData.map((v) => ({
-    ...v,
-    termografos: termosByViaje.get(v.id) ?? [],
-  }));
+  // Temperatura de carga = promedio de la última lectura de cada termógrafo asignado
+  // (igual que el indicador del detalle). Solo visualización; no toca temp_actual ni alertas.
+  const latestPorTermo = await Promise.all(
+    ((termosData ?? []) as Termografo[]).map(async (t) => {
+      const { data } = await supabase
+        .from("lecturas_temperatura")
+        .select("temperatura")
+        .eq("viaje_id", t.viaje_id as string)
+        .eq("termografo_id", t.id)
+        .order("timestamp", { ascending: false })
+        .limit(1);
+      return {
+        viaje_id: t.viaje_id as string,
+        temp: data?.[0]?.temperatura != null ? Number(data[0].temperatura) : null,
+      };
+    })
+  );
+  const tempAcc = new Map<string, { sum: number; n: number }>();
+  for (const r of latestPorTermo) {
+    if (r.temp == null) continue;
+    const a = tempAcc.get(r.viaje_id) ?? { sum: 0, n: 0 };
+    a.sum += r.temp;
+    a.n += 1;
+    tempAcc.set(r.viaje_id, a);
+  }
+
+  const viajes: Viaje[] = viajesData.map((v) => {
+    const acc = tempAcc.get(v.id);
+    return {
+      ...v,
+      termografos: termosByViaje.get(v.id) ?? [],
+      temp_carga: acc ? acc.sum / acc.n : null,
+    };
+  });
 
   return (
     <div className="space-y-6">

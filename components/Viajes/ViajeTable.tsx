@@ -588,7 +588,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                         </td>
                         <td className="px-4 py-3">
                           <TempIndicator
-                            value={v.temp_actual}
+                            value={v.temp_carga ?? v.temp_actual}
                             min={firstProducto?.temp_min}
                             max={firstProducto?.temp_max}
                           />

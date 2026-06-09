@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { defineTrip, copelandTripId } from "@/lib/copeland";
+import { runSync } from "@/lib/sync";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
@@ -61,6 +62,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       if (!r.success) console.error("DefineTrip rechazado:", r.error);
     })
     .catch((e) => console.error("DefineTrip error:", e));
+
+  // Backfill: jala de inmediato las lecturas del termógrafo recién asignado,
+  // sin depender del cursor global del cron (evita perder lecturas previas a la
+  // asignación). El dedup en persistMultipleReadings evita duplicados.
+  try {
+    await runSync(supabase, params.id);
+  } catch (e) {
+    console.error("Backfill sync error:", e);
+  }
 
   const { data: termografos } = await supabase
     .from("termografos")
