@@ -1391,6 +1391,7 @@ export function ViajeDetail({
   // Datos del viaje (unidad) modal
   const [showDatosViaje, setShowDatosViaje] = useState(false);
   const [showAlerta, setShowAlerta] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
   const [concesionarios, setConcesionarios] = useState<Concesionario[]>([]);
 
   // OV form
@@ -1610,6 +1611,19 @@ export function ViajeDetail({
     }
   }
 
+  async function sincronizarViaje() {
+    if (sincronizando) return;
+    setSincronizando(true);
+    try {
+      await fetch(`/api/copeland/sync?viajeId=${viaje.id}`, { method: "POST" });
+    } catch {
+      // best-effort
+    } finally {
+      setSincronizando(false);
+      router.refresh();
+    }
+  }
+
   async function openOVDetail(ov: OrdenVenta, startEditing = false) {
     await loadFormData();
     setDetailOVEdit(startEditing);
@@ -1649,9 +1663,9 @@ export function ViajeDetail({
       .subscribe();
 
     const interval = window.setInterval(() => {
-      fetch(`/api/copeland/sync?viajeId=${viaje.id}`, { method: "POST" })
-        .catch(() => void 0)
-        .finally(() => router.refresh());
+      // Solo refresca desde la BD (que el cron mantiene al día) + tiempo real.
+      // Ya no llama a Copeland desde el detalle, para no saturar GetSensorReadings.
+      router.refresh();
     }, 5 * 60_000);
 
     return () => {
@@ -2263,8 +2277,29 @@ export function ViajeDetail({
         <SectionHeader>Historial</SectionHeader>
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-brand-50 font-display font-semibold text-sm text-brand-900 uppercase tracking-widest">
-              Últimas lecturas
+            <div className="px-5 py-3 border-b border-brand-50 flex items-center justify-between">
+              <span className="font-display font-semibold text-sm text-brand-900 uppercase tracking-widest">
+                Últimas lecturas
+              </span>
+              <button
+                type="button"
+                onClick={sincronizarViaje}
+                disabled={sincronizando}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-900 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`}
+                >
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
+                </svg>
+                {sincronizando ? "Actualizando…" : "Actualizar"}
+              </button>
             </div>
             {lecturas.length === 0 ? (
               <div className="p-6 text-sm text-brand-400 text-center">Sin lecturas aún.</div>
