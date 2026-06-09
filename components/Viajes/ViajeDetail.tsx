@@ -1652,7 +1652,7 @@ export function ViajeDetail({
       fetch(`/api/copeland/sync?viajeId=${viaje.id}`, { method: "POST" })
         .catch(() => void 0)
         .finally(() => router.refresh());
-    }, 3 * 60_000);
+    }, 5 * 60_000);
 
     return () => {
       supabase.removeChannel(channel);

@@ -1,5 +1,5 @@
 {
   "crons": [
-    { "path": "/api/copeland/cron", "schedule": "*/3 * * * *" }
+    { "path": "/api/copeland/cron", "schedule": "*/5 * * * *" }
   ]
 }
