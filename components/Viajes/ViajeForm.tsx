@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { Transportista } from "@/lib/types";
 import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
 import { DatePicker } from "@/components/ui/DatePicker";
 
@@ -33,7 +32,7 @@ export function ViajeForm({
   transportistas,
   usuarios,
 }: {
-  transportistas: Transportista[];
+  transportistas: { id: string; nombre: string }[];
   usuarios: { user_id: string; nombre: string | null; email: string | null }[];
 }) {
   const router = useRouter();
