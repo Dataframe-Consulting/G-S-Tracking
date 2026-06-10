@@ -15,7 +15,6 @@ import type {
   Responsable,
   Status,
   Termografo,
-  Transportista,
   Viaje,
 } from "@/lib/types";
 import { STATUS_LABELS, STATUS_VALUES } from "@/lib/types";
@@ -1403,7 +1402,6 @@ export function ViajeDetail({
   const [combinaciones, setCombinaciones] = useState<ProductoCombinacion[]>([]);
   const [clientes, setClientes] = useState<ClienteConCedis[]>([]);
   const [lugaresOV, setLugaresOV] = useState<{ id: string; nombre: string }[]>([]);
-  const [transportistas, setTransportistas] = useState<Transportista[]>([]);
   const [usuarios, setUsuarios] = useState<
     { id: string; nombre: string | null; email: string | null }[]
   >([]);
@@ -1492,13 +1490,6 @@ export function ViajeDetail({
     await Promise.all(fetches);
   }
 
-  async function loadTransportistas() {
-    if (transportistas.length === 0) {
-      const j = await fetch("/api/transportistas").then((r) => r.json());
-      setTransportistas(j.data ?? []);
-    }
-  }
-
   async function loadConcesionarios() {
     if (concesionarios.length === 0) {
       const j = await fetch("/api/concesionarios").then((r) => r.json());
@@ -1522,7 +1513,7 @@ export function ViajeDetail({
       flete_cargo: viaje.flete_cargo ?? "",
       responsable_id: viaje.responsable_id ?? "",
     });
-    await Promise.all([loadTransportistas(), loadUsuarios()]);
+    await loadUsuarios();
     setEditingViaje(true);
   }
 
