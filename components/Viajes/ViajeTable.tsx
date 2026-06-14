@@ -230,9 +230,91 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
   );
 }
 
-function isCompletado(v: Viaje): boolean {
+function DatoRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-brand-400">{label}</div>
+      <div className="text-sm text-brand-900 mt-0.5">
+        {value?.trim() ? value : <span className="text-brand-300">—</span>}
+      </div>
+    </div>
+  );
+}
+
+function DatosViajeModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
+  const flete = viaje.linea?.concesionario?.nombre ?? viaje.flete_cargo ?? null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-lg overflow-y-auto max-h-[92vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-brand-50">
+          <div>
+            <div className="font-display font-bold text-brand-900">Datos del viaje</div>
+            <div className="text-xs text-brand-400 mt-0.5 font-mono">
+              #{String(viaje.numero).padStart(4, "0")}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-brand-400 hover:text-brand-700 hover:bg-brand-50 transition"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <DatoRow label="Flete" value={flete} />
+          <DatoRow label="Línea transportista" value={viaje.linea?.nombre} />
+          <DatoRow label="Operador" value={viaje.operador} />
+          <div className="grid sm:grid-cols-2 gap-4">
+            <DatoRow label="Modelo" value={viaje.modelo} />
+            <DatoRow label="Año" value={viaje.anio} />
+            <DatoRow label="Placas tracto" value={viaje.placas_tracto} />
+            <DatoRow label="Placas caja" value={viaje.placas_caja} />
+          </div>
+          <DatoRow label="Contacto" value={viaje.contacto_unidad} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type TabKey = "activos" | "completados" | "rechazados";
+type TabItem = { viaje: Viaje; ovs: OrdenVenta[] };
+
+function esTerminal(status: OrdenVenta["status"]): boolean {
+  return status === "ENTREGADO" || status === "RECHAZO_CALIDAD";
+}
+
+// Un viaje está concluido cuando tiene ≥1 OV y TODAS son terminal (entregado o rechazo).
+function viajeConcluidoLocal(ovs: OrdenVenta[]): boolean {
+  return ovs.length > 0 && ovs.every((o) => esTerminal(o.status));
+}
+
+// Devuelve el subconjunto de OVs visible en una pestaña, o null si el viaje no
+// pertenece a esa pestaña:
+//   activos     → viaje NO concluido (≥1 OV en proceso, o sin OVs) → todas sus OVs
+//   completados → viaje concluido, sus OVs entregadas (si tiene ≥1)
+//   rechazados  → viaje concluido, sus OVs rechazadas (si tiene ≥1)
+// Un viaje concluido mixto aparece en ambas (completados y rechazados) con su pedazo.
+function ovsForTab(v: Viaje, tab: TabKey): OrdenVenta[] | null {
   const ovs = v.ordenes_venta ?? [];
-  return ovs.length > 0 && ovs.every((o) => o.status === "ENTREGADO");
+  if (tab === "activos") {
+    return viajeConcluidoLocal(ovs) ? null : ovs;
+  }
+  if (!viajeConcluidoLocal(ovs)) return null;
+  const subset = ovs.filter((o) =>
+    tab === "completados" ? o.status === "ENTREGADO" : o.status === "RECHAZO_CALIDAD"
+  );
+  return subset.length > 0 ? subset : null;
 }
 
 export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
@@ -240,13 +322,25 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
   const [viajes, setViajes] = useState(initialViajes);
   const [modalViajeId, setModalViajeId] = useState<string | null>(null);
   const [ovsModalViaje, setOvsModalViaje] = useState<Viaje | null>(null);
-  const [tab, setTab] = useState<"activos" | "completados">("activos");
+  const [datosViaje, setDatosViaje] = useState<Viaje | null>(null);
+  const [tab, setTab] = useState<TabKey>("activos");
   const [downloading, setDownloading] = useState(false);
 
   async function downloadExcel() {
+    if (filtered.length === 0) {
+      toast.error("No hay registros para descargar");
+      return;
+    }
     setDownloading(true);
     try {
-      const res = await fetch("/api/viajes/reporte");
+      const res = await fetch("/api/viajes/reporte", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          seccion: tab,
+          viaje_ids: filtered.map((it) => it.viaje.id),
+        }),
+      });
       if (!res.ok) { toast.error("Error al generar el reporte"); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -271,23 +365,47 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
   const [fTermografo, setFTermografo] = useState("");
   const [fResponsable, setFResponsable] = useState("");
 
-  const tabViajes = useMemo(
-    () => viajes.filter((v) => tab === "completados" ? isCompletado(v) : !isCompletado(v)),
-    [viajes, tab]
-  );
+  // Items de la pestaña activa: { viaje, ovs visibles }. Un viaje mixto aparece
+  // en completados y en rechazados, cada uno con su subconjunto de OVs.
+  const tabItems = useMemo<TabItem[]>(() => {
+    const out: TabItem[] = [];
+    for (const v of viajes) {
+      const ovs = ovsForTab(v, tab);
+      if (ovs) out.push({ viaje: v, ovs });
+    }
+    // Completados/Rechazados: ordenar por cuándo concluyó el viaje (lo más reciente
+    // arriba). Los que no tienen fecha de conclusión (datos viejos) caen al final,
+    // conservando su orden de creación (numero desc, como llegan de la página).
+    if (tab === "completados" || tab === "rechazados") {
+      out.sort((a, b) => {
+        const ta = a.viaje.concluido_at ? new Date(a.viaje.concluido_at).getTime() : 0;
+        const tb = b.viaje.concluido_at ? new Date(b.viaje.concluido_at).getTime() : 0;
+        return tb - ta;
+      });
+    }
+    return out;
+  }, [viajes, tab]);
 
-  const completadosCount = useMemo(() => viajes.filter(isCompletado).length, [viajes]);
-  const activosCount = viajes.length - completadosCount;
+  // Conteos por pestaña (independientes de la activa). Un viaje mixto suma en ambas.
+  const counts = useMemo(() => {
+    let activos = 0, completados = 0, rechazados = 0;
+    for (const v of viajes) {
+      if (ovsForTab(v, "activos")) activos++;
+      if (ovsForTab(v, "completados")) completados++;
+      if (ovsForTab(v, "rechazados")) rechazados++;
+    }
+    return { activos, completados, rechazados };
+  }, [viajes]);
 
-  const fletes = useMemo(() => unique(tabViajes.map((v) => v.flete_cargo)), [tabViajes]);
-  const origenes = useMemo(() => unique(tabViajes.map((v) => v.lugar_inicio)), [tabViajes]);
+  const fletes = useMemo(() => unique(tabItems.map((it) => it.viaje.flete_cargo)), [tabItems]);
+  const origenes = useMemo(() => unique(tabItems.map((it) => it.viaje.lugar_inicio)), [tabItems]);
   const clientesOpts = useMemo(
-    () => unique(tabViajes.flatMap((v) => (v.ordenes_venta ?? []).map((o) => o.cliente))),
-    [tabViajes]
+    () => unique(tabItems.flatMap((it) => it.ovs.map((o) => o.cliente))),
+    [tabItems]
   );
   const responsablesOpts = useMemo(() => {
     const map = new Map<string, string>();
-    for (const v of tabViajes) {
+    for (const { viaje: v } of tabItems) {
       if (v.responsable_id && v.responsable) {
         const label = v.responsable.nombre ?? v.responsable.email ?? v.responsable_id;
         map.set(v.responsable_id, label);
@@ -296,7 +414,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
     return Array.from(map.entries())
       .sort((a, b) => a[1].localeCompare(b[1]))
       .map(([value, label]) => ({ value, label }));
-  }, [tabViajes]);
+  }, [tabItems]);
 
   const anyFilter = fOvRef || fFlete || fDesde || fHasta || fOrigen || fCliente || fTermografo || fResponsable;
 
@@ -313,7 +431,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
 
   const filtered = useMemo(() => {
     const ovLower = fOvRef.toLowerCase();
-    return tabViajes.filter((v) => {
+    return tabItems.filter(({ viaje: v, ovs }) => {
       if (fFlete && v.flete_cargo !== fFlete) return false;
       if (fDesde && (!v.fecha_inicio || v.fecha_inicio < fDesde)) return false;
       if (fHasta && (!v.fecha_inicio || v.fecha_inicio > fHasta)) return false;
@@ -327,18 +445,16 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
         return false;
       if (fResponsable && v.responsable_id !== fResponsable) return false;
       if (fOvRef) {
-        const match = v.ordenes_venta?.some((o) =>
-          o.ov_ref?.toLowerCase().includes(ovLower)
-        );
+        const match = ovs.some((o) => o.ov_ref?.toLowerCase().includes(ovLower));
         if (!match) return false;
       }
       if (fCliente) {
-        const match = v.ordenes_venta?.some((o) => o.cliente === fCliente);
+        const match = ovs.some((o) => o.cliente === fCliente);
         if (!match) return false;
       }
       return true;
     });
-  }, [tabViajes, fOvRef, fFlete, fDesde, fHasta, fOrigen, fCliente, fTermografo, fResponsable]);
+  }, [tabItems, fOvRef, fFlete, fDesde, fHasta, fOrigen, fCliente, fTermografo, fResponsable]);
 
   const handleTermografoAssigned = useCallback(
     (_viajeId: string, _termografoId: string) => {
@@ -363,6 +479,10 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
         <OVsModal viaje={ovsModalViaje} onClose={() => setOvsModalViaje(null)} />
       )}
 
+      {datosViaje && (
+        <DatosViajeModal viaje={datosViaje} onClose={() => setDatosViaje(null)} />
+      )}
+
       <div className="space-y-3">
         <div className="flex gap-1 border-b border-brand-100">
           <button
@@ -375,7 +495,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
           >
             Activos
             <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${tab === "activos" ? "bg-white/20 text-white" : "bg-brand-100 text-brand-600"}`}>
-              {activosCount}
+              {counts.activos}
             </span>
           </button>
           <button
@@ -388,7 +508,20 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
           >
             Completados
             <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${tab === "completados" ? "bg-white/20 text-white" : "bg-brand-100 text-brand-600"}`}>
-              {completadosCount}
+              {counts.completados}
+            </span>
+          </button>
+          <button
+            onClick={() => { setTab("rechazados"); clearFilters(); }}
+            className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition ${
+              tab === "rechazados"
+                ? "bg-red-600 text-white"
+                : "text-brand-500 hover:text-brand-800 hover:bg-brand-50"
+            }`}
+          >
+            Rechazados
+            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${tab === "rechazados" ? "bg-white/20 text-white" : "bg-brand-100 text-brand-600"}`}>
+              {counts.rechazados}
             </span>
           </button>
         </div>
@@ -490,21 +623,18 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">CEDIS</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Fechas</th>
                     <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Flete</th>
-                    <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Termógrafo</th>
                     <th className="text-left px-4 py-3 font-medium">Temp</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">OVS/REF</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Resp.</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-50">
-                  {filtered.map((v) => {
-                    const ovCount = v.ordenes_venta?.length ?? 0;
-                    const firstProducto = v.ordenes_venta?.[0]?.producto;
-                    const clientes = unique(v.ordenes_venta?.map((o) => o.cliente) ?? []);
+                  {filtered.map(({ viaje: v, ovs }) => {
+                    const ovCount = ovs.length;
+                    const firstProducto = ovs[0]?.producto;
+                    const clientes = unique(ovs.map((o) => o.cliente));
                     const cedis = unique(
-                      (v.ordenes_venta ?? [])
-                        .map((o) => o.cedi)
-                        .filter(Boolean) as string[]
+                      ovs.map((o) => o.cedi).filter(Boolean) as string[]
                     );
                     const clientesLabel =
                       clientes.length === 0
@@ -534,9 +664,9 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                               {v.lugar_fin}
                             </span>
                           </Link>
-                          {v.ordenes_venta && v.ordenes_venta.length > 0 && (
+                          {ovCount > 0 && (
                             <div className="sm:hidden text-xs text-brand-400 mt-0.5">
-                              {v.ordenes_venta.length} OV{v.ordenes_venta.length !== 1 ? "s" : ""}
+                              {ovCount} OV{ovCount !== 1 ? "s" : ""}
                             </div>
                           )}
                         </td>
@@ -562,44 +692,42 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           <div>{formatFecha(v.fecha_inicio)}</div>
                           <div className="text-brand-400">{formatFecha(v.fecha_fin)}</div>
                         </td>
-                        <td className="px-4 py-3 hidden lg:table-cell text-brand-500 text-xs">
-                          {v.linea?.concesionario?.nombre ?? v.flete_cargo ?? <span className="text-brand-300">—</span>}
+                        <td className="px-4 py-3 hidden lg:table-cell">
+                          {v.linea?.concesionario?.nombre ?? v.flete_cargo ? (
+                            <span
+                              onClick={(e) => { e.stopPropagation(); setDatosViaje(v); }}
+                              title="Ver datos del viaje"
+                              className="inline-flex text-xs font-medium px-2 py-1 rounded-lg transition text-brand-700 bg-brand-50 hover:bg-brand-200 cursor-pointer"
+                            >
+                              {v.linea?.concesionario?.nombre ?? v.flete_cargo}
+                            </span>
+                          ) : (
+                            <span className="text-brand-300">—</span>
+                          )}
                         </td>
-                        <td
-                          className="px-4 py-3 hidden lg:table-cell"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <td className="px-4 py-3">
                           {(v.termografos ?? []).length > 0 ? (
-                            <div className="flex flex-col gap-0.5">
-                              {(v.termografos ?? []).map((t) => (
-                                <span key={t.id} className="font-mono text-xs text-brand-700">
-                                  {t.id}
-                                </span>
-                              ))}
-                            </div>
+                            <TempIndicator
+                              value={v.temp_carga ?? v.temp_actual}
+                              min={firstProducto?.temp_min}
+                              max={firstProducto?.temp_max}
+                            />
                           ) : (
                             <button
-                              onClick={() => setModalViajeId(v.id)}
+                              onClick={(e) => { e.stopPropagation(); setModalViajeId(v.id); }}
                               className="rounded-lg border border-brand-200 px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-400 transition whitespace-nowrap"
                             >
                               + Termógrafo
                             </button>
                           )}
                         </td>
-                        <td className="px-4 py-3">
-                          <TempIndicator
-                            value={v.temp_carga ?? v.temp_actual}
-                            min={firstProducto?.temp_min}
-                            max={firstProducto?.temp_max}
-                          />
-                        </td>
                         <td
                           className="px-4 py-3 hidden sm:table-cell"
-                          onClick={(e) => { e.stopPropagation(); if (ovCount > 0) setOvsModalViaje(v); }}
+                          onClick={(e) => { e.stopPropagation(); if (ovCount > 0) setOvsModalViaje({ ...v, ordenes_venta: ovs }); }}
                         >
                           {ovCount > 0 ? (
                             <span className="inline-flex flex-col gap-0.5 text-xs font-medium px-2 py-1 rounded-lg transition text-brand-700 bg-brand-50 hover:bg-brand-200 cursor-pointer">
-                              {(v.ordenes_venta ?? []).map((o) => (
+                              {ovs.map((o) => (
                                 <span key={o.id}>{o.ov_ref || "—"}</span>
                               ))}
                             </span>
@@ -622,11 +750,11 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
               {anyFilter ? (
                 <>
                   <span className="text-brand-700 font-medium">{filtered.length}</span> de{" "}
-                  {tabViajes.length} viaje{tabViajes.length !== 1 ? "s" : ""}
+                  {tabItems.length} viaje{tabItems.length !== 1 ? "s" : ""}
                 </>
               ) : (
                 <>
-                  {tabViajes.length} viaje{tabViajes.length !== 1 ? "s" : ""}
+                  {tabItems.length} viaje{tabItems.length !== 1 ? "s" : ""}
                 </>
               )}
             </div>

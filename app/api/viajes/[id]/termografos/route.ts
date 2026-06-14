@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { defineTrip, copelandTripId } from "@/lib/copeland";
 import { runSync } from "@/lib/sync";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
@@ -49,6 +50,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     { id, asignado: true, viaje_id: params.id },
     { onConflict: "id" }
   );
+
+  await logAudit(supabase, {
+    viaje_id: params.id,
+    tipo: "MODIFICACION",
+    descripcion: `Asignó termógrafo ${id}`,
+  });
 
   defineTrip({
     tripId: copelandTripId(viaje.numero, id),

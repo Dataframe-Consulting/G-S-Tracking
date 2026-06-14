@@ -1,6 +1,12 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// Prefijo del registro de auditoría que marca un cambio de status de una OV.
+// Es la ÚNICA fuente de "cuándo concluyó el viaje" sin tocar la BD: se comparte
+// entre la ruta que lo escribe (PATCH de OV) y las consultas que lo filtran para
+// ordenar Completados/Rechazados. Si cambias este texto, cambia en ambos lados solo.
+export const STATUS_CHANGE_AUDIT_PREFIX = "Cambió status de OV";
+
 type AuditTipo = "CREACION" | "MODIFICACION";
 
 interface AuditTarget {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { Viaje, Termografo } from "@/lib/types";
+import { STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit";
 import { ViajeTable } from "@/components/Viajes/ViajeTable";
 
 export const dynamic = "force-dynamic";
@@ -65,12 +66,30 @@ export default async function ViajesPage() {
     tempAcc.set(r.viaje_id, a);
   }
 
+  // concluido_at (calculado, no en BD): fecha del último cambio de status de cada
+  // viaje, leída del histórico de auditoría (inmutable, no se mueve al editar otros
+  // campos). Sirve para ordenar Completados/Rechazados por cuándo concluyeron.
+  const concluidoAt = new Map<string, string>();
+  if (viajeIds.length) {
+    const { data: statusAudit } = await supabase
+      .from("auditoria")
+      .select("viaje_id, created_at")
+      .in("viaje_id", viajeIds)
+      .ilike("descripcion", `${STATUS_CHANGE_AUDIT_PREFIX}%`)
+      .order("created_at", { ascending: true });
+    // Orden ascendente → el último registro por viaje gana = el cambio más reciente.
+    for (const a of statusAudit ?? []) {
+      if (a.viaje_id) concluidoAt.set(a.viaje_id, a.created_at as string);
+    }
+  }
+
   const viajes: Viaje[] = viajesData.map((v) => {
     const acc = tempAcc.get(v.id);
     return {
       ...v,
       termografos: termosByViaje.get(v.id) ?? [],
       temp_carga: acc ? acc.sum / acc.n : null,
+      concluido_at: concluidoAt.get(v.id) ?? null,
     };
   });
 

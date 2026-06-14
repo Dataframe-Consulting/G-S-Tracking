@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -46,10 +47,12 @@ export function LogoEmpresa({
         onClick={() => isMaster && !uploading && inputRef.current?.click()}
       >
         {logoUrl ? (
-          <img
+          <Image
             src={logoUrl}
             alt="Logo empresa"
-            className="w-full h-full object-contain p-2"
+            fill
+            unoptimized
+            className="object-contain p-2"
           />
         ) : (
           <div className="flex flex-col items-center gap-1 text-brand-300">

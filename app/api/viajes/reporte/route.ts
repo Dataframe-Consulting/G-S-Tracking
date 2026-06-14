@@ -12,8 +12,29 @@ const STATUS_LABELS: Record<string, string> = {
   RECHAZO_CALIDAD: "Rechazo calidad",
 };
 
-export async function GET() {
+type Seccion = "activos" | "completados" | "rechazados";
+
+// Recorta las OVs de un viaje según la sección, igual que la tabla:
+//   activos     → todas · completados → solo entregadas · rechazados → solo rechazadas
+function ovsForSeccion(ovs: OrdenVenta[], seccion: Seccion): OrdenVenta[] {
+  if (seccion === "completados") return ovs.filter((o) => o.status === "ENTREGADO");
+  if (seccion === "rechazados") return ovs.filter((o) => o.status === "RECHAZO_CALIDAD");
+  return ovs;
+}
+
+export async function POST(req: Request) {
   const supabase = createServerSupabase();
+
+  const body = (await req.json().catch(() => ({}))) as {
+    seccion?: Seccion;
+    viaje_ids?: string[];
+  };
+  const seccion: Seccion = body.seccion ?? "activos";
+  const viajeIds = Array.isArray(body.viaje_ids) ? body.viaje_ids : [];
+
+  if (viajeIds.length === 0) {
+    return NextResponse.json({ error: "Sin viajes para exportar" }, { status: 400 });
+  }
 
   const { data, error } = await supabase
     .from("viajes")
@@ -30,16 +51,21 @@ export async function GET() {
         )
       )
     `)
-    .order("numero", { ascending: false });
+    .in("id", viajeIds);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const viajes = (data ?? []) as Viaje[];
+  // Respetar el orden en que la tabla los mostró (el cliente manda viaje_ids ya
+  // ordenados según la sección y filtros), para que el Excel cuadre con la pantalla.
+  const orderIndex = new Map(viajeIds.map((id, i) => [id, i]));
+  const viajes = ((data ?? []) as Viaje[]).sort(
+    (a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0)
+  );
 
   const rows: Record<string, string | number | null>[] = [];
 
   for (const v of viajes) {
-    const ovs: OrdenVenta[] = v.ordenes_venta ?? [];
+    const ovs: OrdenVenta[] = ovsForSeccion(v.ordenes_venta ?? [], seccion);
     const responsableNombre = v.responsable?.nombre ?? v.responsable?.email ?? null;
 
     for (const ov of ovs) {
@@ -113,7 +139,7 @@ export async function GET() {
   return new Response(buf, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="viajes_${today}.xlsx"`,
+      "Content-Disposition": `attachment; filename="viajes_${seccion}_${today}.xlsx"`,
     },
   });
 }

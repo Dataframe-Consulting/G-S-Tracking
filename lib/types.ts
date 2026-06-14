@@ -99,6 +99,9 @@ export interface Viaje {
   temp_actual: number | null;
   /** Calculado (no en BD): promedio de la última lectura de cada termógrafo asignado */
   temp_carga?: number | null;
+  /** Calculado (no en BD): fecha del último cambio de status, derivado de auditoría.
+   *  Usado para ordenar Completados/Rechazados por cuándo concluyó el viaje. */
+  concluido_at?: string | null;
   lat: number | null;
   lng: number | null;
   ultima_lectura: string | null;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { STATUS_VALUES, STATUS_LABELS, type Status } from "@/lib/types";
-import { logAudit, logAuditMany } from "@/lib/audit";
+import { logAudit, logAuditMany, STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit";
 import { to12h } from "@/lib/time";
 
 const OV_FIELD_LABELS: Record<string, string> = {
@@ -94,7 +94,7 @@ export async function PATCH(
 
     if ("status" in body && prev.status !== data.status) {
       descripciones.push(
-        `Cambió status de OV ${ref} de ${statusLabel(prev.status)} a ${statusLabel(data.status)}`
+        `${STATUS_CHANGE_AUDIT_PREFIX} ${ref} de ${statusLabel(prev.status)} a ${statusLabel(data.status)}`
       );
     }
 
