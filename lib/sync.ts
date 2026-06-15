@@ -3,6 +3,7 @@ import { getSensorReadings, simulateDeviceReadings } from "./copeland";
 import type { CopelandReading } from "./copeland";
 import { checkAlertas } from "./alertas";
 import { viajeConcluido } from "./viaje";
+import { resolveUbicacion } from "./geocode";
 import type { Status } from "./types";
 
 type ViajeRow = {
@@ -91,16 +92,32 @@ async function persistMultipleReadings(
     new Date(a.timestamp) > new Date(b.timestamp) ? a : b
   );
 
+  // Geocodificar la última posición a Ciudad/Estado/País (con caché compartido,
+  // sin tocar el proveedor si la zona ya se resolvió antes). Fail-safe: si falla,
+  // deja la ubicación previa intacta (no la sobrescribe con nulls).
+  let ubicacion: Awaited<ReturnType<typeof resolveUbicacion>> | null = null;
+  if (latest.latitude != null && latest.longitude != null) {
+    ubicacion = await resolveUbicacion(supabase, latest.latitude, latest.longitude);
+  }
+
+  const viajeUpdate: Record<string, unknown> = {
+    temp_actual: avgTemp,
+    lat: latest.latitude,
+    lng: latest.longitude,
+    ultima_lectura: latest.timestamp,
+    updated_at: new Date().toISOString(),
+  };
+  if (ubicacion && (ubicacion.ciudad || ubicacion.estado || ubicacion.pais)) {
+    viajeUpdate.ubicacion_ciudad = ubicacion.ciudad;
+    viajeUpdate.ubicacion_estado = ubicacion.estado;
+    viajeUpdate.ubicacion_pais = ubicacion.pais;
+    viajeUpdate.ubicacion_geo_key = ubicacion.geo_key;
+  }
+
   await Promise.all([
     supabase
       .from("viajes")
-      .update({
-        temp_actual: avgTemp,
-        lat: latest.latitude,
-        lng: latest.longitude,
-        ultima_lectura: latest.timestamp,
-        updated_at: new Date().toISOString(),
-      })
+      .update(viajeUpdate)
       .eq("id", viaje.id),
     ...devices.map(({ termografoId, readings }) =>
       supabase

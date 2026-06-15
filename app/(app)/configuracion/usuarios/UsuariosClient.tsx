@@ -16,11 +16,14 @@ const inp = "rounded-xl border border-brand-200 px-3 py-2.5 text-sm text-brand-9
 
 export function UsuariosClient({
   usuarios: initial,
-  currentUserId
+  currentUserId,
+  currentUserRole
 }: {
   usuarios: UserProfile[];
   currentUserId: string;
+  currentUserRole: Role;
 }) {
+  const isMaster = currentUserRole === "master";
   const [usuarios, setUsuarios] = useState<UserProfile[]>(initial);
   const [forms, setForms] = useState<Record<Role, typeof emptyForm>>({
     master: { ...emptyForm }, operador: { ...emptyForm }, visor: { ...emptyForm }
@@ -32,6 +35,25 @@ export function UsuariosClient({
     master: false, operador: false, visor: false
   });
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [changingRole, setChangingRole] = useState<string | null>(null);
+
+  async function changeRole(userId: string, role: Role) {
+    setChangingRole(userId);
+    const res = await fetch(`/api/usuarios/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role })
+    });
+    setChangingRole(null);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      toast.error(j.error || "Error al cambiar rol");
+      return;
+    }
+    toast.success("Rol actualizado");
+    // Actualiza el estado → el usuario se mueve solo a la sección del nuevo rol.
+    setUsuarios((us) => us.map((u) => (u.id === userId ? { ...u, role } : u)));
+  }
 
   function toggleForm(role: Role) {
     setShowForm((s) => ({ ...s, [role]: !s[role] }));
@@ -82,16 +104,18 @@ export function UsuariosClient({
                 <span className={`text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{label}</span>
                 <span className="text-xs text-brand-400">{group.length} usuario{group.length !== 1 ? "s" : ""}</span>
               </div>
-              <button
-                onClick={() => toggleForm(key)}
-                className={`rounded-xl px-4 py-1.5 text-sm font-semibold transition ${
-                  isOpen
-                    ? "border border-brand-200 text-brand-700 hover:bg-brand-50"
-                    : "bg-brand-900 text-white hover:bg-brand-800"
-                }`}
-              >
-                {isOpen ? "Cancelar" : "+ Agregar"}
-              </button>
+              {isMaster && (
+                <button
+                  onClick={() => toggleForm(key)}
+                  className={`rounded-xl px-4 py-1.5 text-sm font-semibold transition ${
+                    isOpen
+                      ? "border border-brand-200 text-brand-700 hover:bg-brand-50"
+                      : "bg-brand-900 text-white hover:bg-brand-800"
+                  }`}
+                >
+                  {isOpen ? "Cancelar" : "+ Agregar"}
+                </button>
+              )}
             </div>
 
             {/* Add form */}
@@ -151,12 +175,27 @@ export function UsuariosClient({
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
+                      {isMaster && u.id !== currentUserId && (
+                        <select
+                          value={u.role}
+                          onChange={(e) => changeRole(u.id, e.target.value as Role)}
+                          disabled={changingRole === u.id}
+                          title="Cambiar rol"
+                          className="rounded-lg border border-brand-200 bg-white px-2 py-1 text-xs font-medium text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-50 transition cursor-pointer"
+                        >
+                          {ROLES.map((r) => (
+                            <option key={r.key} value={r.key}>
+                              {r.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       {u.id === currentUserId && (
                         <span className="text-xs bg-brand-50 text-brand-700 border border-brand-200 rounded-full px-2.5 py-0.5 font-medium">
                           tú
                         </span>
                       )}
-                      {u.id !== currentUserId && (
+                      {isMaster && u.id !== currentUserId && (
                         <button
                           onClick={() => removeUser(u.id)}
                           disabled={deleting === u.id}

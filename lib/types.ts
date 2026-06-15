@@ -96,6 +96,10 @@ export interface Viaje {
   placas_tracto: string | null;
   placas_caja: string | null;
   contacto_unidad: string | null;
+  ubicacion_ciudad: string | null;
+  ubicacion_estado: string | null;
+  ubicacion_pais: string | null;
+  ubicacion_geo_key: string | null;
   temp_actual: number | null;
   /** Calculado (no en BD): promedio de la última lectura de cada termógrafo asignado */
   temp_carga?: number | null;

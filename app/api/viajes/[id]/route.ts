@@ -154,22 +154,51 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
+
+  // Solo master u operador pueden eliminar viajes (visor no).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const role = profile?.role ?? "master";
+  if (role !== "master" && role !== "operador") {
+    return NextResponse.json({ error: "Sin permiso para eliminar viajes" }, { status: 403 });
+  }
+
   const { data: prev } = await supabase
     .from("viajes")
-    .select("termografo_id, numero")
+    .select("numero, termografo_id")
     .eq("id", params.id)
     .single();
 
-  const { error } = await supabase.from("viajes").delete().eq("id", params.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  // Desasignar TODOS los termógrafos del viaje (modelo multi) y cerrar sus trips en
+  // Copeland. El FK termografos.viaje_id NO tiene cascade: si no se desasignan, el
+  // borrado falla. Se incluye el campo legacy viajes.termografo_id por si quedó alguno.
+  const { data: termos } = await supabase
+    .from("termografos")
+    .select("id")
+    .eq("viaje_id", params.id);
 
-  if (prev?.termografo_id) {
-    closeTrip(copelandTripId(prev.numero ?? params.id, prev.termografo_id), prev.termografo_id).catch(() => {});
+  const termoIds = new Set<string>((termos ?? []).map((t) => t.id as string));
+  if (prev?.termografo_id) termoIds.add(prev.termografo_id);
+  for (const tid of termoIds) {
+    closeTrip(copelandTripId(prev?.numero ?? params.id, tid), tid).catch(() => {});
+  }
+  if (termos && termos.length > 0) {
     await supabase
       .from("termografos")
       .update({ asignado: false, viaje_id: null })
-      .eq("id", prev.termografo_id);
+      .eq("viaje_id", params.id);
   }
+
+  // Cascada en BD: OVs, lecturas, alertas e historial de auditoría se borran solos.
+  const { error } = await supabase.from("viajes").delete().eq("id", params.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   return NextResponse.json({ ok: true });
 }

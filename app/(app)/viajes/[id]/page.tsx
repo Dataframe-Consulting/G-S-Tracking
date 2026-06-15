@@ -17,6 +17,15 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
 
   if (!viaje) notFound();
 
+  // Rol del usuario para gatear acciones sensibles (ej. eliminar viaje).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase.from("user_profiles").select("role").eq("user_id", user.id).maybeSingle()
+    : { data: null };
+  const role = (profile?.role as string) ?? "master";
+
   const [{ data: lecturas }, { data: alertas }, { data: termografos }, { data: auditoria }] =
     await Promise.all([
       supabase
@@ -55,6 +64,7 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
         alertas={(alertas ?? []) as AlertaLog[]}
         termografos={(termografos ?? []) as Termografo[]}
         auditoria={(auditoria ?? []) as Auditoria[]}
+        role={role}
       />
     </div>
   );

@@ -27,6 +27,9 @@ export default async function UsuariosPage() {
     created_at: u.created_at
   }));
 
+  const currentUserRole: Role =
+    ((profileMap.get(user?.id ?? "") as { role: Role } | undefined)?.role ?? "master") as Role;
+
   return (
     <div className="space-y-6">
       <div>
@@ -55,7 +58,7 @@ export default async function UsuariosPage() {
         ))}
       </div>
 
-      <UsuariosClient usuarios={usuarios} currentUserId={user?.id ?? ""} />
+      <UsuariosClient usuarios={usuarios} currentUserId={user?.id ?? ""} currentUserRole={currentUserRole} />
     </div>
   );
 }

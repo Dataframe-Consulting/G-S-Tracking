@@ -623,8 +623,9 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">CEDIS</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Fechas</th>
                     <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Flete</th>
-                    <th className="text-left px-4 py-3 font-medium">Temp</th>
+                    <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Ubicación</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">OVS/REF</th>
+                    <th className="text-left px-4 py-3 font-medium">Temp</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Resp.</th>
                   </tr>
                 </thead>
@@ -705,20 +706,13 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                             <span className="text-brand-300">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3">
-                          {(v.termografos ?? []).length > 0 ? (
-                            <TempIndicator
-                              value={v.temp_carga ?? v.temp_actual}
-                              min={firstProducto?.temp_min}
-                              max={firstProducto?.temp_max}
-                            />
+                        <td className="px-4 py-3 hidden md:table-cell text-xs text-brand-700">
+                          {v.ubicacion_estado ?? v.ubicacion_ciudad ? (
+                            <span className="line-clamp-2">
+                              {v.ubicacion_estado ?? v.ubicacion_ciudad}
+                            </span>
                           ) : (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setModalViajeId(v.id); }}
-                              className="rounded-lg border border-brand-200 px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-400 transition whitespace-nowrap"
-                            >
-                              + Termógrafo
-                            </button>
+                            <span className="text-brand-300">—</span>
                           )}
                         </td>
                         <td
@@ -735,6 +729,22 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full text-brand-300 bg-brand-50">
                               0 OVs
                             </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {(v.termografos ?? []).length > 0 ? (
+                            <TempIndicator
+                              value={v.temp_carga ?? v.temp_actual}
+                              min={firstProducto?.temp_min}
+                              max={firstProducto?.temp_max}
+                            />
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setModalViajeId(v.id); }}
+                              className="rounded-lg border border-brand-200 px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-400 transition whitespace-nowrap"
+                            >
+                              + Termógrafo
+                            </button>
                           )}
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">

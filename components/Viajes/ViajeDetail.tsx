@@ -43,20 +43,30 @@ function GeoCell({ lat, lng }: { lat: number; lng: number }) {
   useEffect(() => {
     if (fetched.current) return;
     fetched.current = true;
+    // Leemos los campos ESTRUCTURADOS (address) en vez de cortar display_name:
+    // así la granularidad es siempre Ciudad/Municipio, Estado, País (consistente).
     fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=10&lat=${lat}&lon=${lng}`,
       { headers: { "Accept-Language": "es-MX,es" } }
     )
       .then((r) => r.json())
       .then((data) => {
-        const parts = (data.display_name ?? "")
-          .split(", ")
-          .filter((p: string) => !/^\d{4,5}$/.test(p) && p !== "México" && p !== "Mexico");
-        const result = parts.slice(0, 4).join(", ") || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+        const a = data.address ?? {};
+        const ciudad = a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? null;
+        const estado = a.state ?? null;
+        const pais = a.country ?? null;
+        const partes = [ciudad, estado, pais].filter(Boolean);
+        if (partes.length === 0) {
+          // Sin datos (incluye respuestas de error/límite): no cacheamos para poder
+          // reintentar luego, y NO mostramos coordenadas.
+          setLabel("Ubicación no disponible");
+          return;
+        }
+        const result = partes.join(", ");
         _geoCache.set(key, result);
         setLabel(result);
       })
-      .catch(() => setLabel(`${lat.toFixed(3)}, ${lng.toFixed(3)}`));
+      .catch(() => setLabel("Ubicación no disponible"));
   }, [key, lat, lng]);
 
   if (!label) return <span className="text-brand-300 text-xs">…</span>;
@@ -1358,12 +1368,14 @@ export function ViajeDetail({
   alertas,
   termografos: initialTermografos,
   auditoria,
+  role,
 }: {
   viaje: Viaje;
   lecturas: LecturaTemperatura[];
   alertas: AlertaLog[];
   termografos: Termografo[];
   auditoria: Auditoria[];
+  role: string;
 }) {
   const router = useRouter();
   const [viaje, setViaje] = useState(initialViaje);
@@ -1386,6 +1398,26 @@ export function ViajeDetail({
 
   // Termógrafo modal
   const [showTermografoModal, setShowTermografoModal] = useState(false);
+
+  // Eliminar viaje (solo master/operador)
+  const canDelete = role === "master" || role === "operador";
+  const [showDeleteViaje, setShowDeleteViaje] = useState(false);
+  const [deletingViaje, setDeletingViaje] = useState(false);
+
+  async function handleDeleteViaje() {
+    setDeletingViaje(true);
+    const res = await fetch(`/api/viajes/${viaje.id}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Viaje eliminado");
+      router.push("/viajes");
+      router.refresh();
+    } else {
+      const json = await res.json().catch(() => ({}));
+      toast.error(json.error || "Error al eliminar el viaje");
+      setDeletingViaje(false);
+      setShowDeleteViaje(false);
+    }
+  }
 
   // Datos del viaje (unidad) modal
   const [showDatosViaje, setShowDatosViaje] = useState(false);
@@ -1683,6 +1715,64 @@ export function ViajeDetail({
         />
       )}
 
+      {/* Modal confirmar eliminar viaje */}
+      {showDeleteViaje && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => !deletingViaje && setShowDeleteViaje(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-md overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-4 border-b border-brand-50">
+              <div className="font-display font-bold text-red-600">
+                Eliminar viaje #{String(viaje.numero).padStart(4, "0")}
+              </div>
+              <p className="text-sm text-brand-500 mt-1">
+                Esta acción es permanente y no se puede deshacer.
+              </p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <p className="text-sm text-brand-700">Se eliminará de forma definitiva:</p>
+              <ul className="text-sm text-brand-700 space-y-1.5">
+                <li className="flex items-center gap-2">
+                  <span className="text-red-500">•</span>
+                  {ordenes.length} orden{ordenes.length !== 1 ? "es" : ""} de venta (OV)
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-red-500">•</span>
+                  Todo el histórico de temperatura, alertas y modificaciones
+                </li>
+                {termografos.length > 0 && (
+                  <li className="flex items-center gap-2">
+                    <span className="text-red-500">•</span>
+                    Se desconectarán {termografos.length} termógrafo
+                    {termografos.length !== 1 ? "s" : ""}
+                  </li>
+                )}
+              </ul>
+            </div>
+            <div className="flex items-center gap-3 px-6 pb-5 pt-2 border-t border-brand-50">
+              <button
+                onClick={handleDeleteViaje}
+                disabled={deletingViaje}
+                className="rounded-xl bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60 transition shadow-sm"
+              >
+                {deletingViaje ? "Eliminando…" : "Sí, eliminar viaje"}
+              </button>
+              <button
+                onClick={() => setShowDeleteViaje(false)}
+                disabled={deletingViaje}
+                className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50 transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal alerta de temperatura */}
       {showAlerta && (
         <div
@@ -1794,12 +1884,22 @@ export function ViajeDetail({
               </button>
             </div>
           ) : (
-            <button
-              onClick={startEditViaje}
-              className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
-            >
-              Editar viaje
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={startEditViaje}
+                className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
+              >
+                Editar viaje
+              </button>
+              {canDelete && (
+                <button
+                  onClick={() => setShowDeleteViaje(true)}
+                  className="rounded-xl border border-red-200 px-5 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition"
+                >
+                  Eliminar viaje
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
