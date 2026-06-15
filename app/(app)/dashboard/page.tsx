@@ -1,5 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
-import type { OrdenVenta, Producto } from "@/lib/types";
+import type { OrdenVenta, Producto, Status } from "@/lib/types";
 import { KpiCards } from "@/components/Dashboard/KpiCards";
 import { DashboardFilters } from "./Filters";
 import { DashboardLive } from "./Live";
@@ -41,27 +41,40 @@ export default async function DashboardPage({
   // Ordenes en el rango + viaje info para flete
   let q = supabase
     .from("ordenes_venta")
-    .select(`*, producto:productos(id, nombre, temp_min, temp_max), viaje:viajes(id, flete_cargo, alerta_activa)`)
+    .select(`*, producto:productos(id, nombre, temp_min, temp_max), viaje:viajes(id, flete_cargo, alerta_activa, linea:lineas_transportista!linea_transportista_id(concesionario:concesionarios!concesionario_id(nombre)))`)
     .gte("fecha_carga", fechaDesde)
     .lte("fecha_carga", fechaHasta)
     .order("fecha_carga", { ascending: true });
 
   if (productoId) q = q.eq("producto_id", productoId);
 
-  const [{ data }, { data: productosData }, { count: alertasCount }] = await Promise.all([
+  const [{ data }, { data: productosData }] = await Promise.all([
     q,
     supabase.from("productos").select("*").order("nombre"),
-    supabase.from("viajes").select("*", { count: "exact", head: true }).eq("alerta_activa", true),
   ]);
 
-  const ordenes = (data ?? []) as (OrdenVenta & { viaje: { id: string; flete_cargo: string | null; alerta_activa: boolean } | null })[];
+  const ordenes = (data ?? []) as (OrdenVenta & {
+    viaje: {
+      id: string;
+      flete_cargo: string | null;
+      alerta_activa: boolean;
+      linea: { concesionario: { nombre: string } | null } | null;
+    } | null;
+  })[];
   const productos = (productosData ?? []) as Producto[];
 
   // KPIs
   const total = ordenes.length;
-  const enTransito = ordenes.filter((o) => o.status === "TRANSITO").length;
-  const alertas = alertasCount ?? 0;
-  const entregadas = ordenes.filter((o) => o.status === "ENTREGADO").length;
+  // Desglose por status (suma = total).
+  const porStatus = { PENDIENTE: 0, EN_PREPARACION: 0, TRANSITO: 0, ENTREGADO: 0, RECHAZO_CALIDAD: 0 } as Record<Status, number>;
+  // Alertas: viajes (distintos) con alerta activa, dentro del mismo rango/producto
+  // filtrado (derivado de las órdenes, ya no global).
+  const viajesConAlerta = new Set<string>();
+  for (const o of ordenes) {
+    porStatus[o.status] = (porStatus[o.status] ?? 0) + 1;
+    if (o.viaje?.alerta_activa && o.viaje.id) viajesConAlerta.add(o.viaje.id);
+  }
+  const alertas = viajesConAlerta.size;
 
   // Chart 1: ordenes por fecha
   const fechaMap = new Map<string, ChartCargaRow>();
@@ -86,10 +99,12 @@ export default async function DashboardPage({
     (a, b) => a.fecha.localeCompare(b.fecha)
   );
 
-  // Chart 2: por transportista (top 8) — from viaje.flete_cargo
+  // Chart 2: por transportista (top 8) — concesionario del modelo nuevo, con
+  // fallback al campo legacy flete_cargo (mismo criterio que la tabla de viajes).
   const transportistaMap = new Map<string, number>();
   for (const o of ordenes) {
-    const t = o.viaje?.flete_cargo?.trim() || "Sin asignar";
+    const nombre = o.viaje?.linea?.concesionario?.nombre ?? o.viaje?.flete_cargo;
+    const t = nombre?.trim() || "Sin asignar";
     transportistaMap.set(t, (transportistaMap.get(t) ?? 0) + 1);
   }
   const byTransportista: ChartTransportistaRow[] = Array.from(transportistaMap.entries())
@@ -125,12 +140,7 @@ export default async function DashboardPage({
         productos={productos}
       />
 
-      <KpiCards
-        total={total}
-        enTransito={enTransito}
-        alertas={alertas}
-        entregadas={entregadas}
-      />
+      <KpiCards total={total} alertas={alertas} porStatus={porStatus} />
 
       <DashboardCharts
         byFecha={byFecha}

@@ -41,6 +41,7 @@ export async function POST(req: Request) {
     .select(`
       *,
       responsable:user_profiles!responsable_id(id, nombre, email),
+      linea:lineas_transportista!linea_transportista_id ( nombre, concesionario:concesionarios!concesionario_id ( nombre ) ),
       ordenes_venta (
         *,
         producto:productos(id, nombre, temp_min, temp_max),
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
         "Destino": v.lugar_fin,
         "Fecha Inicio": v.fecha_inicio,
         "Fecha Fin": v.fecha_fin,
-        "Flete": v.flete_cargo ?? null,
+        "Flete": v.linea?.concesionario?.nombre ?? v.flete_cargo ?? null,
         "Responsable": responsableNombre,
         "Temperatura Actual": v.temp_actual ?? null,
       });

@@ -14,6 +14,13 @@ function unique(values: (string | null | undefined)[]): string[] {
   return Array.from(new Set(values.filter(Boolean) as string[])).sort();
 }
 
+// Flete mostrado/filtrado: concesionario del modelo nuevo, con fallback al campo
+// legacy flete_cargo. La columna, las opciones del filtro y la comparación deben
+// usar SIEMPRE este mismo valor para no desincronizarse.
+function fleteDe(v: Viaje): string | null {
+  return v.linea?.concesionario?.nombre ?? v.flete_cargo ?? null;
+}
+
 function FilterSelect({
   label,
   value,
@@ -397,7 +404,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
     return { activos, completados, rechazados };
   }, [viajes]);
 
-  const fletes = useMemo(() => unique(tabItems.map((it) => it.viaje.flete_cargo)), [tabItems]);
+  const fletes = useMemo(() => unique(tabItems.map((it) => fleteDe(it.viaje))), [tabItems]);
   const origenes = useMemo(() => unique(tabItems.map((it) => it.viaje.lugar_inicio)), [tabItems]);
   const clientesOpts = useMemo(
     () => unique(tabItems.flatMap((it) => it.ovs.map((o) => o.cliente))),
@@ -432,7 +439,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
   const filtered = useMemo(() => {
     const ovLower = fOvRef.toLowerCase();
     return tabItems.filter(({ viaje: v, ovs }) => {
-      if (fFlete && v.flete_cargo !== fFlete) return false;
+      if (fFlete && fleteDe(v) !== fFlete) return false;
       if (fDesde && (!v.fecha_inicio || v.fecha_inicio < fDesde)) return false;
       if (fHasta && (!v.fecha_inicio || v.fecha_inicio > fHasta)) return false;
       if (fOrigen && v.lugar_inicio !== fOrigen) return false;
@@ -694,13 +701,13 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           <div className="text-brand-400">{formatFecha(v.fecha_fin)}</div>
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell">
-                          {v.linea?.concesionario?.nombre ?? v.flete_cargo ? (
+                          {fleteDe(v) ? (
                             <span
                               onClick={(e) => { e.stopPropagation(); setDatosViaje(v); }}
                               title="Ver datos del viaje"
                               className="inline-flex text-xs font-medium px-2 py-1 rounded-lg transition text-brand-700 bg-brand-50 hover:bg-brand-200 cursor-pointer"
                             >
-                              {v.linea?.concesionario?.nombre ?? v.flete_cargo}
+                              {fleteDe(v)}
                             </span>
                           ) : (
                             <span className="text-brand-300">—</span>
