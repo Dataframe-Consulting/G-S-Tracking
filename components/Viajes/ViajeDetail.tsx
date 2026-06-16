@@ -12,6 +12,7 @@ import type {
   OrdenVenta,
   Producto,
   ProductoCombinacion,
+  RangoTemperatura,
   Responsable,
   Status,
   Termografo,
@@ -26,7 +27,7 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { ModificacionesSection } from "@/components/Viajes/ModificacionesSection";
-import { cToF, tempEstado } from "@/lib/temperature";
+import { cToF, fToC, tempEstado } from "@/lib/temperature";
 import { to12h } from "@/lib/time";
 import { formatFecha, formatFechaHora } from "@/lib/fecha";
 import { viajeConcluido } from "@/lib/viaje";
@@ -1399,6 +1400,24 @@ export function ViajeDetail({
   // Termógrafo modal
   const [showTermografoModal, setShowTermografoModal] = useState(false);
 
+  // Rango de temperatura del viaje (manual o de catálogo). Si se define, manda
+  // sobre los productos de las OVs (Fase 1).
+  const [editingRango, setEditingRango] = useState(false);
+  const [rangoForm, setRangoForm] = useState({ min: "", max: "" });
+  const [savingRango, setSavingRango] = useState(false);
+  const [rangosCatalogo, setRangosCatalogo] = useState<RangoTemperatura[]>([]);
+  // Paso del modal: null = elegir opción · luego "catalogo" o "manual".
+  const [rangoOpcion, setRangoOpcion] = useState<null | "catalogo" | "manual">(null);
+  const [catalogoOpen, setCatalogoOpen] = useState(false);
+
+  // Modo actual: catálogo (ligado a un rango) · manual · automático (productos)
+  const modoRango: "catalogo" | "manual" | "auto" =
+    viaje.temp_rango_id != null
+      ? "catalogo"
+      : viaje.temp_min != null && viaje.temp_max != null
+        ? "manual"
+        : "auto";
+
   // Eliminar viaje (solo master/operador)
   const canDelete = role === "master" || role === "operador";
   const [showDeleteViaje, setShowDeleteViaje] = useState(false);
@@ -1452,14 +1471,85 @@ export function ViajeDetail({
     () => ordenes.map((o) => o.producto).filter(Boolean) as Producto[],
     [ordenes]
   );
+  // Rango efectivo: si el viaje tiene su propio rango (ambos definidos), manda;
+  // si no, se deriva de los productos de las OVs (retrocompatible, igual que el sync).
+  const hasViajeRange = viaje.temp_min != null && viaje.temp_max != null;
   const tempMin = useMemo(
-    () => (tempRanges.length > 0 ? Math.max(...tempRanges.map((p) => Number(p.temp_min))) : null),
-    [tempRanges]
+    () =>
+      hasViajeRange
+        ? Number(viaje.temp_min)
+        : tempRanges.length > 0
+          ? Math.max(...tempRanges.map((p) => Number(p.temp_min)))
+          : null,
+    [hasViajeRange, viaje.temp_min, tempRanges]
   );
   const tempMax = useMemo(
-    () => (tempRanges.length > 0 ? Math.min(...tempRanges.map((p) => Number(p.temp_max))) : null),
-    [tempRanges]
+    () =>
+      hasViajeRange
+        ? Number(viaje.temp_max)
+        : tempRanges.length > 0
+          ? Math.min(...tempRanges.map((p) => Number(p.temp_max)))
+          : null,
+    [hasViajeRange, viaje.temp_max, tempRanges]
   );
+
+  // Abre el editor de rango precargando el rango efectivo actual (en °F) y carga
+  // el catálogo de rangos (una sola vez) para el selector.
+  async function openEditRango() {
+    setRangoForm({
+      min: tempMin != null ? (cToF(tempMin) as number).toFixed(0) : "",
+      max: tempMax != null ? (cToF(tempMax) as number).toFixed(0) : "",
+    });
+    setRangoOpcion(null);
+    setCatalogoOpen(false);
+    setEditingRango(true);
+    if (rangosCatalogo.length === 0) {
+      const j = await fetch("/api/rangos").then((r) => r.json()).catch(() => ({}));
+      setRangosCatalogo((j.data ?? []) as RangoTemperatura[]);
+    }
+  }
+
+  // Guarda el rango: manual (rangoId null), de catálogo (rangoId set) o limpia
+  // (todo null = vuelve al automático por productos). Todo en °C.
+  async function saveRango(minC: number | null, maxC: number | null, rangoId: string | null) {
+    setSavingRango(true);
+    const res = await fetch(`/api/viajes/${viaje.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ temp_min: minC, temp_max: maxC, temp_rango_id: rangoId }),
+    });
+    setSavingRango(false);
+    if (!res.ok) {
+      toast.error("Error al guardar el rango");
+      return;
+    }
+    setViaje((v) => ({ ...v, temp_min: minC, temp_max: maxC, temp_rango_id: rangoId }));
+    setEditingRango(false);
+    toast.success(minC != null ? "Rango actualizado" : "Rango automático restaurado");
+    router.refresh();
+  }
+
+  // Manual: escribe min/max en °F → se convierte a °C, sin rango de catálogo.
+  function submitRango() {
+    const minF = parseFloat(rangoForm.min);
+    const maxF = parseFloat(rangoForm.max);
+    if (Number.isNaN(minF) || Number.isNaN(maxF)) {
+      toast.error("Ingresa mínimo y máximo");
+      return;
+    }
+    if (minF >= maxF) {
+      toast.error("El mínimo debe ser menor que el máximo");
+      return;
+    }
+    saveRango(fToC(minF) as number, fToC(maxF) as number, null);
+  }
+
+  // Catálogo: copia el min/max del rango elegido al viaje y guarda su id.
+  function selectRangoCatalogo(rangoId: string) {
+    const r = rangosCatalogo.find((x) => x.id === rangoId);
+    if (!r) return;
+    saveRango(Number(r.temp_min), Number(r.temp_max), r.id);
+  }
 
   const lecturasByTermografo = useMemo(() => {
     const map = new Map<string, LecturaTemperatura[]>();
@@ -1713,6 +1803,167 @@ export function ViajeDetail({
             router.refresh();
           }}
         />
+      )}
+
+      {/* Modal rango de temperatura */}
+      {editingRango && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => !savingRango && setEditingRango(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-4 border-b border-brand-50">
+              <div className="font-display font-bold text-brand-900">Rango de temperatura</div>
+            </div>
+
+            <div className="px-6 py-5">
+              {/* Paso 1: elegir opción */}
+              {rangoOpcion === null && (
+                <div className="space-y-3">
+                  <p className="text-sm text-brand-500">¿Cómo quieres definir el rango?</p>
+                  <button
+                    onClick={() => setRangoOpcion("catalogo")}
+                    className="w-full text-left rounded-xl border border-brand-200 px-4 py-3 hover:border-brand-400 hover:bg-brand-50 transition"
+                  >
+                    <div className="text-sm font-semibold text-brand-900">Catálogo de temperaturas</div>
+                    <div className="text-xs text-brand-400 mt-0.5">Elige un rango ya dado de alta</div>
+                  </button>
+                  <button
+                    onClick={() => setRangoOpcion("manual")}
+                    className="w-full text-left rounded-xl border border-brand-200 px-4 py-3 hover:border-brand-400 hover:bg-brand-50 transition"
+                  >
+                    <div className="text-sm font-semibold text-brand-900">Temperatura manual</div>
+                    <div className="text-xs text-brand-400 mt-0.5">Ingresa el mínimo y máximo a mano</div>
+                  </button>
+                </div>
+              )}
+
+              {/* Paso 2a: catálogo */}
+              {rangoOpcion === "catalogo" && (
+                <div>
+                  <div className="text-xs font-medium text-brand-700 mb-1.5">Catálogo de temperaturas</div>
+                  {rangosCatalogo.length > 0 ? (
+                    <div className="relative">
+                      {/* Botón: muestra solo el rango seleccionado (título) */}
+                      <button
+                        type="button"
+                        onClick={() => setCatalogoOpen((o) => !o)}
+                        disabled={savingRango}
+                        className={`${fieldCls} bg-white flex items-center justify-between text-left`}
+                      >
+                        <span className={viaje.temp_rango_id ? "text-brand-900" : "text-brand-300"}>
+                          {(() => {
+                            const sel = rangosCatalogo.find((r) => r.id === viaje.temp_rango_id);
+                            return sel
+                              ? `${(cToF(sel.temp_min) as number).toFixed(0)}–${(cToF(sel.temp_max) as number).toFixed(0)}°F`
+                              : "— Selecciona un rango —";
+                          })()}
+                        </span>
+                        <svg className="w-4 h-4 text-brand-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+
+                      {/* Lista: cada rango con sus productos en vertical */}
+                      {catalogoOpen && (
+                        <div className="mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-brand-200 bg-white">
+                          {rangosCatalogo.map((r) => (
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => {
+                                setCatalogoOpen(false);
+                                selectRangoCatalogo(r.id);
+                              }}
+                              className="w-full text-left px-3 py-2 border-b border-brand-50 last:border-0 hover:bg-brand-50 transition"
+                            >
+                              <div className="text-sm font-semibold text-brand-900">
+                                {(cToF(r.temp_min) as number).toFixed(0)}–{(cToF(r.temp_max) as number).toFixed(0)}°F
+                              </div>
+                              {(r.productos ?? []).length > 0 && (
+                                <div className="mt-0.5 flex flex-col">
+                                  {(r.productos ?? []).map((p) => (
+                                    <span key={p.id} className="text-xs text-brand-500">
+                                      {p.nombre}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-brand-300 italic">
+                      No hay rangos en el catálogo. Créalos en Configuración → Temperaturas.
+                    </p>
+                  )}
+                  <p className="text-[11px] text-brand-400 mt-1">
+                    Al elegir un rango, el viaje se actualiza si luego editas ese rango en el catálogo.
+                  </p>
+                </div>
+              )}
+
+              {/* Paso 2b: manual */}
+              {rangoOpcion === "manual" && (
+                <div>
+                  <div className="text-xs font-medium text-brand-700 mb-1.5">Temperatura manual</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      autoFocus
+                      value={rangoForm.min}
+                      onChange={(e) => setRangoForm((f) => ({ ...f, min: e.target.value }))}
+                      placeholder="mín"
+                      className="w-20 rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                    <span className="text-brand-400">—</span>
+                    <input
+                      type="number"
+                      value={rangoForm.max}
+                      onChange={(e) => setRangoForm((f) => ({ ...f, max: e.target.value }))}
+                      placeholder="máx"
+                      className="w-20 rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                    <span className="text-xs text-brand-400">°F</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 px-6 pb-5 pt-2 border-t border-brand-50">
+              {rangoOpcion === "manual" && (
+                <button
+                  onClick={submitRango}
+                  disabled={savingRango}
+                  className="rounded-xl bg-brand-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60 transition shadow-sm"
+                >
+                  {savingRango ? "Guardando…" : "Guardar"}
+                </button>
+              )}
+              {rangoOpcion !== null && (
+                <button
+                  type="button"
+                  onClick={() => setRangoOpcion(null)}
+                  className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
+                >
+                  Atrás
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setEditingRango(false)}
+                className="text-sm text-brand-500 hover:text-brand-900 transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal confirmar eliminar viaje */}
@@ -2250,6 +2501,33 @@ export function ViajeDetail({
               )}
             </div>
           )}
+
+          {/* Rango de temperatura del viaje */}
+          <div className="rounded-xl border border-brand-100 bg-white px-4 py-3">
+            <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">
+              Rango de temperatura
+            </div>
+            <div className="text-sm font-medium text-brand-900">
+              {tempMin != null && tempMax != null
+                ? `${(cToF(tempMin) as number).toFixed(0)} — ${(cToF(tempMax) as number).toFixed(0)}°F`
+                : "—"}
+            </div>
+            <div className="flex items-end justify-between gap-2 mt-0.5">
+              <div className="text-[11px] text-brand-400">
+                {modoRango === "catalogo"
+                  ? "Catálogo de temperaturas"
+                  : modoRango === "manual"
+                    ? "Manual (definido en el viaje)"
+                    : "Automático (productos de las OVs)"}
+              </div>
+              <button
+                onClick={openEditRango}
+                className="text-xs text-brand-500 hover:text-brand-900 transition shrink-0"
+              >
+                Editar
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

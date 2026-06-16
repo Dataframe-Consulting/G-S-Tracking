@@ -34,6 +34,17 @@ export interface Producto {
   nombre: string;
   temp_min: number;
   temp_max: number;
+  /** Rango del catálogo al que pertenece el producto (Fase 2-3). Un producto → un rango. */
+  rango_id?: string | null;
+}
+
+export interface RangoTemperatura {
+  id: string;
+  temp_min: number;
+  temp_max: number;
+  created_at: string;
+  /** Productos asignados a este rango (productos.rango_id = este.id) */
+  productos?: Producto[];
 }
 
 export interface ProductoCombinacion {
@@ -100,6 +111,11 @@ export interface Viaje {
   ubicacion_estado: string | null;
   ubicacion_pais: string | null;
   ubicacion_geo_key: string | null;
+  /** Rango propio del viaje (si está definido, manda sobre los productos de las OVs) */
+  temp_min: number | null;
+  temp_max: number | null;
+  /** Rango del catálogo que usa el viaje (modo "Catálogo"); copia su min/max a temp_min/max */
+  temp_rango_id?: string | null;
   temp_actual: number | null;
   /** Calculado (no en BD): promedio de la última lectura de cada termógrafo asignado */
   temp_carga?: number | null;

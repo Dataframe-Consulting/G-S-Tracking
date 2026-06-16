@@ -10,13 +10,22 @@ type ViajeRow = {
   id: string;
   termografo_ids: string[];
   alerta_activa: boolean;
+  temp_min: number | null;
+  temp_max: number | null;
   ordenes_venta: Array<{
     status: Status;
     produto: { temp_min: number; temp_max: number } | null;
   }>;
 };
 
+// Rango efectivo del viaje. Si el viaje tiene su PROPIO rango (temp_min y temp_max
+// definidos), ese manda. Si no, se cae al cálculo viejo: intersección más
+// restrictiva de los rangos de los productos de las OVs (retrocompatible).
 function getTempRange(viaje: ViajeRow) {
+  if (viaje.temp_min != null && viaje.temp_max != null) {
+    return { productTempMin: Number(viaje.temp_min), productTempMax: Number(viaje.temp_max) };
+  }
+
   const productos = viaje.ordenes_venta
     .map((o) => (Array.isArray(o.produto) ? o.produto[0] : o.produto))
     .filter(Boolean) as Array<{ temp_min: number; temp_max: number }>;
@@ -134,7 +143,7 @@ async function loadViajes(
 ): Promise<ViajeRow[]> {
   let q = supabase
     .from("termografos")
-    .select(`id, viaje_id, viajes!inner(id, alerta_activa, ordenes_venta(status, produto:productos(temp_min, temp_max)))`)
+    .select(`id, viaje_id, viajes!inner(id, alerta_activa, temp_min, temp_max, ordenes_venta(status, produto:productos(temp_min, temp_max)))`)
     .eq("asignado", true);
 
   if (viajeId) q = q.eq("viaje_id", viajeId);
@@ -155,6 +164,8 @@ async function loadViajes(
     const viajeRaw = (Array.isArray(t.viajes) ? t.viajes[0] : t.viajes) as {
       id: string;
       alerta_activa: boolean;
+      temp_min: number | null;
+      temp_max: number | null;
       ordenes_venta: ViajeRow["ordenes_venta"];
     } | null;
     if (!viajeRaw) continue;
@@ -166,6 +177,8 @@ async function loadViajes(
         id: t.viaje_id,
         termografo_ids: [t.id],
         alerta_activa: !!viajeRaw.alerta_activa,
+        temp_min: viajeRaw.temp_min,
+        temp_max: viajeRaw.temp_max,
         ordenes_venta: viajeRaw.ordenes_venta ?? [],
       });
     }

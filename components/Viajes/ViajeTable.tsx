@@ -742,8 +742,8 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           {(v.termografos ?? []).length > 0 ? (
                             <TempIndicator
                               value={v.temp_carga ?? v.temp_actual}
-                              min={firstProducto?.temp_min}
-                              max={firstProducto?.temp_max}
+                              min={v.temp_min ?? firstProducto?.temp_min}
+                              max={v.temp_max ?? firstProducto?.temp_max}
                             />
                           ) : (
                             <button

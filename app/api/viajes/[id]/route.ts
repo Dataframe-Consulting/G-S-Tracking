@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { defineTrip, closeTrip, copelandTripId } from "@/lib/copeland";
 import { logAuditMany } from "@/lib/audit";
+import { cToF } from "@/lib/temperature";
 
 const VIAJE_FIELD_LABELS: Record<string, string> = {
   lugar_inicio: "lugar de inicio",
@@ -17,6 +18,13 @@ const VIAJE_FIELD_LABELS: Record<string, string> = {
 function fmt(value: unknown): string {
   if (value == null || value === "") return "(vacío)";
   return String(value);
+}
+
+// El rango se guarda en °C (como productos/lecturas); en auditoría se muestra en °F.
+function rangoLabel(min: unknown, max: unknown): string {
+  if (min == null || max == null) return "(sin rango)";
+  const f = (v: unknown) => (cToF(Number(v)) as number).toFixed(0);
+  return `${f(min)}–${f(max)}°F`;
 }
 
 async function resolveResponsable(
@@ -50,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const { data: prev } = await supabase
     .from("viajes")
     .select(
-      "termografo_id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin, flete_cargo, responsable_id, numero"
+      "termografo_id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin, flete_cargo, responsable_id, numero, temp_min, temp_max"
     )
     .eq("id", params.id)
     .single();
@@ -71,6 +79,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     "placas_tracto",
     "placas_caja",
     "contacto_unidad",
+    "temp_min",
+    "temp_max",
+    "temp_rango_id",
   ];
   for (const k of allowed) if (k in body) update[k] = body[k];
 
@@ -146,6 +157,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         descripciones.push(`Cambió ${label} de ${fmt(antes)} a ${fmt(despues)}`);
       }
     }
+    // Rango de temperatura del viaje (min+max como una sola unidad, mostrado en °F)
+    if ("temp_min" in body || "temp_max" in body) {
+      const eq = (a: unknown, b: unknown) =>
+        (a == null && b == null) || Number(a) === Number(b);
+      if (!eq(prev.temp_min, data.temp_min) || !eq(prev.temp_max, data.temp_max)) {
+        descripciones.push(
+          `Cambió rango de temperatura de ${rangoLabel(prev.temp_min, prev.temp_max)} a ${rangoLabel(data.temp_min, data.temp_max)}`
+        );
+      }
+    }
+
     await logAuditMany(supabase, { viaje_id: params.id, tipo: "MODIFICACION" }, descripciones);
   }
 

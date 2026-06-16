@@ -29,6 +29,16 @@ const cards = [
     )
   },
   {
+    href: "/configuracion/temperaturas",
+    title: "Temperaturas",
+    desc: "Rangos de temperatura y productos por rango",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+        <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+      </svg>
+    )
+  },
+  {
     href: "/configuracion/clientes",
     title: "Clientes",
     desc: "Directorio de clientes y contactos",
