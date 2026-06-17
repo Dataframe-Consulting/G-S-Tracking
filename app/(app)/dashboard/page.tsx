@@ -38,15 +38,19 @@ export default async function DashboardPage({
   const fechaHasta = searchParams.fecha_hasta ?? today();
   const productoId = searchParams.producto_id ?? "";
 
-  // Ordenes en el rango + viaje info para flete
+  // Ordenes en el rango + viaje info para flete. Si se filtra por producto, se
+  // hace join interno a orden_productos (Fase 5: el producto vive en esa tabla).
+  const opJoin = productoId
+    ? "orden_productos!inner(producto_id)"
+    : "orden_productos(producto_id)";
   let q = supabase
     .from("ordenes_venta")
-    .select(`*, producto:productos(id, nombre, temp_min, temp_max), viaje:viajes(id, flete_cargo, alerta_activa, linea:lineas_transportista!linea_transportista_id(concesionario:concesionarios!concesionario_id(nombre)))`)
+    .select(`*, ${opJoin}, viaje:viajes(id, flete_cargo, alerta_activa, linea:lineas_transportista!linea_transportista_id(concesionario:concesionarios!concesionario_id(nombre)))`)
     .gte("fecha_carga", fechaDesde)
     .lte("fecha_carga", fechaHasta)
     .order("fecha_carga", { ascending: true });
 
-  if (productoId) q = q.eq("producto_id", productoId);
+  if (productoId) q = q.eq("orden_productos.producto_id", productoId);
 
   const [{ data }, { data: productosData }] = await Promise.all([
     q,

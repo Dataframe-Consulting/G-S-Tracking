@@ -32,9 +32,8 @@ export const STATUS_CLASSES: Record<Status, string> = {
 export interface Producto {
   id: string;
   nombre: string;
-  temp_min: number;
-  temp_max: number;
-  /** Rango del catálogo al que pertenece el producto (Fase 2-3). Un producto → un rango. */
+  /** Rango del catálogo al que pertenece el producto (Fase 2-3). Un producto → un rango.
+   *  Los productos ya NO tienen temperatura propia (Fase 4): el rango lo define el viaje. */
   rango_id?: string | null;
 }
 
@@ -47,14 +46,13 @@ export interface RangoTemperatura {
   productos?: Producto[];
 }
 
-export interface ProductoCombinacion {
+// Un producto dentro de una OV (Fase 5: N productos por OV, cada uno con cajas).
+export interface OrdenProducto {
   id: string;
-  producto_a_id: string;
-  producto_b_id: string;
-  temp_min: number;
-  temp_max: number;
-  producto_a: { id: string; nombre: string };
-  producto_b: { id: string; nombre: string };
+  orden_id?: string;
+  producto_id: string | null;
+  cajas: number | null;
+  producto?: { id: string; nombre: string } | null;
 }
 
 export interface OrdenVenta {
@@ -73,15 +71,11 @@ export interface OrdenVenta {
   factura_gys: string | null;
   status: Status;
   instrucciones: string;
-  producto_id: string | null;
-  producto_combinacion_id: string | null;
   cedi: string | null;
-  cajas: number | null;
-  cajas_b: number | null;
   created_at: string;
   updated_at: string;
-  producto?: Producto | null;
-  combo?: ProductoCombinacion | null;
+  /** Productos de la OV (Fase 5). Reemplaza producto/combo + cajas/cajas_b. */
+  productos?: OrdenProducto[];
 }
 
 export interface Responsable {

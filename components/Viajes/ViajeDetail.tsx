@@ -11,7 +11,6 @@ import type {
   LecturaTemperatura,
   OrdenVenta,
   Producto,
-  ProductoCombinacion,
   RangoTemperatura,
   Responsable,
   Status,
@@ -123,20 +122,87 @@ const bareSelect =
 const fieldCls =
   "w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder:text-brand-300 transition";
 
-function parseProductoSel(sel: string): {
-  producto_id: string | null;
-  producto_combinacion_id: string | null;
-} {
-  if (sel.startsWith("prod:")) return { producto_id: sel.slice(5), producto_combinacion_id: null };
-  if (sel.startsWith("combo:"))
-    return { producto_id: null, producto_combinacion_id: sel.slice(6) };
-  return { producto_id: null, producto_combinacion_id: null };
+// Fase 5: una OV tiene N productos, cada uno con sus cajas (orden_productos).
+type OVProductoRow = { producto_id: string; cajas: string };
+
+function ovProductosToRows(ov: OrdenVenta): OVProductoRow[] {
+  const rows = (ov.productos ?? []).map((p) => ({
+    producto_id: p.producto_id ?? "",
+    cajas: p.cajas != null ? String(p.cajas) : "",
+  }));
+  return rows.length > 0 ? rows : [{ producto_id: "", cajas: "" }];
 }
 
-function productoSelFromOV(ov: OrdenVenta): string {
-  if (ov.producto_id) return `prod:${ov.producto_id}`;
-  if (ov.producto_combinacion_id) return `combo:${ov.producto_combinacion_id}`;
-  return "";
+function rowsToPayload(rows: OVProductoRow[]) {
+  return rows
+    .filter((r) => r.producto_id)
+    .map((r) => ({ producto_id: r.producto_id, cajas: r.cajas !== "" ? Number(r.cajas) : null }));
+}
+
+// Editor repetible de productos: [producto ▾] [cajas] + "agregar otro producto".
+function ProductosEditor({
+  rows,
+  productos,
+  onChange,
+}: {
+  rows: OVProductoRow[];
+  productos: Producto[];
+  onChange: (rows: OVProductoRow[]) => void;
+}) {
+  const setRow = (i: number, patch: Partial<OVProductoRow>) =>
+    onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addRow = () => onChange([...rows, { producto_id: "", cajas: "" }]);
+  const removeRow = (i: number) =>
+    onChange(rows.length > 1 ? rows.filter((_, idx) => idx !== i) : rows);
+
+  return (
+    <div className="lg:col-span-3 space-y-2">
+      <div className="text-xs font-medium text-brand-700">Productos *</div>
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <select
+            value={r.producto_id}
+            onChange={(e) => setRow(i, { producto_id: e.target.value })}
+            className={`${fieldCls} bg-white flex-1`}
+          >
+            <option value="">— Selecciona producto —</option>
+            {productos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={0}
+            value={r.cajas}
+            onChange={(e) => setRow(i, { cajas: e.target.value })}
+            placeholder="cajas"
+            className={`${fieldCls} w-24`}
+          />
+          {rows.length > 1 && (
+            <button
+              type="button"
+              onClick={() => removeRow(i)}
+              title="Quitar producto"
+              className="shrink-0 rounded-lg border border-brand-200 px-2 py-2 text-brand-400 hover:text-red-500 hover:border-red-200 transition"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addRow}
+        className="text-xs font-medium text-brand-600 hover:text-brand-900 transition"
+      >
+        + Agregar otro producto
+      </button>
+    </div>
+  );
 }
 
 type OVFormData = {
@@ -153,9 +219,7 @@ type OVFormData = {
   factura_gys: string;
   status: Status;
   instrucciones: string;
-  producto_sel: string;
-  cajas: string;
-  cajas_b: string;
+  productos: OVProductoRow[];
 };
 
 type ClienteConCedis = { id: string; nombre: string; cedis?: { id: string; nombre: string }[] };
@@ -174,16 +238,13 @@ const emptyOVForm = (today: string): OVFormData => ({
   factura_gys: "",
   status: "PENDIENTE",
   instrucciones: "",
-  producto_sel: "",
-  cajas: "",
-  cajas_b: "",
+  productos: [{ producto_id: "", cajas: "" }],
 });
 
 function OVFormPanel({
   viaje_id,
   editingOV,
   productos,
-  combinaciones,
   clientes,
   lugaresCarga,
   onSaved,
@@ -192,7 +253,6 @@ function OVFormPanel({
   viaje_id: string;
   editingOV: OrdenVenta | null;
   productos: Producto[];
-  combinaciones: ProductoCombinacion[];
   clientes: ClienteConCedis[];
   lugaresCarga: { id: string; nombre: string }[];
   onSaved: (ov: OrdenVenta) => void;
@@ -215,9 +275,7 @@ function OVFormPanel({
           factura_gys: editingOV.factura_gys ?? "",
           status: editingOV.status,
           instrucciones: editingOV.instrucciones,
-          producto_sel: productoSelFromOV(editingOV),
-          cajas: editingOV.cajas != null ? String(editingOV.cajas) : "",
-          cajas_b: editingOV.cajas_b != null ? String(editingOV.cajas_b) : "",
+          productos: ovProductosToRows(editingOV),
         }
       : emptyOVForm(today)
   );
@@ -231,18 +289,14 @@ function OVFormPanel({
     setForm((f) => ({ ...f, [key]: val }));
   }
 
-  const isCombo = form.producto_sel.startsWith("combo:");
-  const isProd = form.producto_sel.startsWith("prod:");
-  const selectedCombo = isCombo
-    ? combinaciones.find((c) => c.id === form.producto_sel.slice(6))
-    : null;
   const clienteCedis =
     clientes.find((c) => c.nombre === form.cliente)?.cedis ?? [];
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.producto_sel) {
-      toast.error("Selecciona un producto");
+    const productos = rowsToPayload(form.productos);
+    if (productos.length === 0) {
+      toast.error("Agrega al menos un producto");
       return;
     }
     if (clienteCedis.length > 0 && !form.cedi) {
@@ -250,7 +304,6 @@ function OVFormPanel({
       return;
     }
     setSaving(true);
-    const { producto_id, producto_combinacion_id } = parseProductoSel(form.producto_sel);
     const body = {
       ov_ref: form.ov_ref,
       cliente: form.cliente,
@@ -265,10 +318,7 @@ function OVFormPanel({
       factura_gys: form.tiene_cita ? form.factura_gys || null : null,
       status: form.status,
       instrucciones: form.instrucciones,
-      producto_id,
-      producto_combinacion_id,
-      cajas: form.cajas !== "" ? Number(form.cajas) : null,
-      cajas_b: form.cajas_b !== "" ? Number(form.cajas_b) : null,
+      productos,
     };
 
     const url = editingOV
@@ -420,75 +470,11 @@ function OVFormPanel({
             />
           )}
         </div>
-        <label className="block text-xs font-medium text-brand-700">
-          Producto *
-          <select
-            value={form.producto_sel}
-            onChange={(e) => upd("producto_sel", e.target.value)}
-            className={`${fieldCls} bg-white mt-1`}
-          >
-            <option value="">— Selecciona producto —</option>
-            {productos.length > 0 && (
-              <optgroup label="── Individuales">
-                {productos.map((p) => (
-                  <option key={p.id} value={`prod:${p.id}`}>
-                    {p.nombre} ({(cToF(p.temp_min) as number).toFixed(0)}° — {(cToF(p.temp_max) as number).toFixed(0)}°F)
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {combinaciones.length > 0 && (
-              <optgroup label="── Combinados">
-                {combinaciones.map((c) => (
-                  <option key={c.id} value={`combo:${c.id}`}>
-                    {c.producto_a.nombre} + {c.producto_b.nombre} ({(cToF(c.temp_min) as number).toFixed(0)}° — {(cToF(c.temp_max) as number).toFixed(0)}°F)
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        </label>
-
-        {isProd && (
-          <label className="block text-xs font-medium text-brand-700">
-            Cajas
-            <input
-              type="number"
-              min={0}
-              value={form.cajas}
-              onChange={(e) => upd("cajas", e.target.value)}
-              placeholder="0"
-              className={`${fieldCls} mt-1`}
-            />
-          </label>
-        )}
-
-        {isCombo && (
-          <>
-            <label className="block text-xs font-medium text-brand-700">
-              Cajas {selectedCombo?.producto_a.nombre ?? "Producto A"}
-              <input
-                type="number"
-                min={0}
-                value={form.cajas}
-                onChange={(e) => upd("cajas", e.target.value)}
-                placeholder="0"
-                className={`${fieldCls} mt-1`}
-              />
-            </label>
-            <label className="block text-xs font-medium text-brand-700">
-              Cajas {selectedCombo?.producto_b.nombre ?? "Producto B"}
-              <input
-                type="number"
-                min={0}
-                value={form.cajas_b}
-                onChange={(e) => upd("cajas_b", e.target.value)}
-                placeholder="0"
-                className={`${fieldCls} mt-1`}
-              />
-            </label>
-          </>
-        )}
+        <ProductosEditor
+          rows={form.productos}
+          productos={productos}
+          onChange={(rows) => upd("productos", rows)}
+        />
 
         <label className="block text-xs font-medium text-brand-700 lg:col-span-3">
           Instrucciones
@@ -587,7 +573,6 @@ function OVDetailModal({
   ov: initialOv,
   viaje_id,
   productos,
-  combinaciones,
   clientes,
   initialEditing = false,
   onClose,
@@ -597,7 +582,6 @@ function OVDetailModal({
   ov: OrdenVenta;
   viaje_id: string;
   productos: Producto[];
-  combinaciones: ProductoCombinacion[];
   clientes: ClienteConCedis[];
   initialEditing?: boolean;
   onClose: () => void;
@@ -620,9 +604,7 @@ function OVDetailModal({
     factura_gys: initialOv.factura_gys ?? "",
     status: initialOv.status,
     instrucciones: initialOv.instrucciones,
-    producto_sel: productoSelFromOV(initialOv),
-    cajas: initialOv.cajas != null ? String(initialOv.cajas) : "",
-    cajas_b: initialOv.cajas_b != null ? String(initialOv.cajas_b) : "",
+    productos: ovProductosToRows(initialOv),
   }));
   const [saving, setSaving] = useState(false);
 
@@ -645,9 +627,7 @@ function OVDetailModal({
       factura_gys: ov.factura_gys ?? "",
       status: ov.status,
       instrucciones: ov.instrucciones,
-      producto_sel: productoSelFromOV(ov),
-      cajas: ov.cajas != null ? String(ov.cajas) : "",
-      cajas_b: ov.cajas_b != null ? String(ov.cajas_b) : "",
+      productos: ovProductosToRows(ov),
     });
     setIsEditing(true);
   }
@@ -657,13 +637,13 @@ function OVDetailModal({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.producto_sel) { toast.error("Selecciona un producto"); return; }
+    const productosPayload = rowsToPayload(form.productos);
+    if (productosPayload.length === 0) { toast.error("Agrega al menos un producto"); return; }
     if (modalClienteCedis.length > 0 && !form.cedi) {
       toast.error("Selecciona un CEDIS");
       return;
     }
     setSaving(true);
-    const { producto_id, producto_combinacion_id } = parseProductoSel(form.producto_sel);
     const body = {
       ov_ref: form.ov_ref,
       cliente: form.cliente,
@@ -678,10 +658,7 @@ function OVDetailModal({
       factura_gys: form.tiene_cita ? form.factura_gys || null : null,
       status: form.status,
       instrucciones: form.instrucciones,
-      producto_id,
-      producto_combinacion_id,
-      cajas: form.cajas !== "" ? Number(form.cajas) : null,
-      cajas_b: form.cajas_b !== "" ? Number(form.cajas_b) : null,
+      productos: productosPayload,
     };
     const res = await fetch(`/api/viajes/${viaje_id}/ordenes/${ov.id}`, {
       method: "PATCH",
@@ -698,16 +675,7 @@ function OVDetailModal({
     onSaved(updated);
   }
 
-  const combo =
-    ov.combo ??
-    (ov.producto_combinacion_id
-      ? combinaciones.find((c) => c.id === ov.producto_combinacion_id)
-      : null);
-  const isCombo = form.producto_sel.startsWith("combo:");
-  const isProd = form.producto_sel.startsWith("prod:");
-  const selectedCombo = isCombo
-    ? combinaciones.find((c) => c.id === form.producto_sel.slice(6))
-    : null;
+  const ovProductos = ov.productos ?? [];
 
   return (
     <div
@@ -819,76 +787,12 @@ function OVDetailModal({
                 </label>
               </div>
 
-              {/* Producto + Cajas */}
-              <div className={`grid gap-3 ${isProd ? "sm:grid-cols-2" : isCombo ? "sm:grid-cols-3" : ""}`}>
-                <label className="block text-xs font-medium text-brand-700">
-                  Producto *
-                  <select
-                    value={form.producto_sel}
-                    onChange={(e) => upd("producto_sel", e.target.value)}
-                    className={`${fieldCls} bg-white mt-1`}
-                  >
-                    <option value="">— Selecciona producto —</option>
-                    {productos.length > 0 && (
-                      <optgroup label="── Individuales">
-                        {productos.map((p) => (
-                          <option key={p.id} value={`prod:${p.id}`}>
-                            {p.nombre} ({(cToF(p.temp_min) as number).toFixed(0)}° — {(cToF(p.temp_max) as number).toFixed(0)}°F)
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {combinaciones.length > 0 && (
-                      <optgroup label="── Combinados">
-                        {combinaciones.map((c) => (
-                          <option key={c.id} value={`combo:${c.id}`}>
-                            {c.producto_a.nombre} + {c.producto_b.nombre} ({(cToF(c.temp_min) as number).toFixed(0)}° — {(cToF(c.temp_max) as number).toFixed(0)}°F)
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </label>
-                {isProd && (
-                  <label className="block text-xs font-medium text-brand-700">
-                    Cajas
-                    <input
-                      type="number"
-                      min={0}
-                      value={form.cajas}
-                      onChange={(e) => upd("cajas", e.target.value)}
-                      placeholder="0"
-                      className={`${fieldCls} mt-1`}
-                    />
-                  </label>
-                )}
-                {isCombo && (
-                  <>
-                    <label className="block text-xs font-medium text-brand-700">
-                      Cajas {selectedCombo?.producto_a.nombre ?? "Producto A"}
-                      <input
-                        type="number"
-                        min={0}
-                        value={form.cajas}
-                        onChange={(e) => upd("cajas", e.target.value)}
-                        placeholder="0"
-                        className={`${fieldCls} mt-1`}
-                      />
-                    </label>
-                    <label className="block text-xs font-medium text-brand-700">
-                      Cajas {selectedCombo?.producto_b.nombre ?? "Producto B"}
-                      <input
-                        type="number"
-                        min={0}
-                        value={form.cajas_b}
-                        onChange={(e) => upd("cajas_b", e.target.value)}
-                        placeholder="0"
-                        className={`${fieldCls} mt-1`}
-                      />
-                    </label>
-                  </>
-                )}
-              </div>
+              {/* Productos + Cajas */}
+              <ProductosEditor
+                rows={form.productos}
+                productos={productos}
+                onChange={(rows) => upd("productos", rows)}
+              />
 
               {/* Instrucciones */}
               <label className="block text-xs font-medium text-brand-700">
@@ -1030,35 +934,23 @@ function OVDetailModal({
                 </div>
               </div>
 
-              {/* Producto */}
+              {/* Productos */}
               <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3">
-                <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">Producto</div>
-                {ov.producto ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-brand-900">{ov.producto.nombre}</div>
-                      <div className="text-xs text-brand-500">{(cToF(ov.producto.temp_min) as number).toFixed(0)}° — {(cToF(ov.producto.temp_max) as number).toFixed(0)}°F</div>
-                    </div>
-                    {ov.cajas != null && (
-                      <div className="text-right">
-                        <div className="text-xl font-bold text-brand-900">{ov.cajas}</div>
-                        <div className="text-xs text-brand-400">cajas</div>
+                <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">
+                  Producto{ovProductos.length !== 1 ? "s" : ""}
+                </div>
+                {ovProductos.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {ovProductos.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between rounded-lg bg-white border border-brand-100 px-3 py-2">
+                        <div className="text-sm font-medium text-brand-900 truncate">
+                          {p.producto?.nombre ?? "—"}
+                        </div>
+                        {p.cajas != null && (
+                          <div className="text-sm font-bold text-brand-700 ml-2 shrink-0">{p.cajas} cj</div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ) : combo ? (
-                  <div>
-                    <div className="text-xs text-brand-500 mb-2">{(cToF(combo.temp_min) as number).toFixed(0)}° — {(cToF(combo.temp_max) as number).toFixed(0)}°F</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="flex items-center justify-between rounded-lg bg-white border border-brand-100 px-3 py-2">
-                        <div className="text-sm font-medium text-brand-900 truncate">{combo.producto_a.nombre}</div>
-                        {ov.cajas != null && <div className="text-sm font-bold text-brand-700 ml-2 shrink-0">{ov.cajas} cj</div>}
-                      </div>
-                      <div className="flex items-center justify-between rounded-lg bg-white border border-brand-100 px-3 py-2">
-                        <div className="text-sm font-medium text-brand-900 truncate">{combo.producto_b.nombre}</div>
-                        {ov.cajas_b != null && <div className="text-sm font-bold text-brand-700 ml-2 shrink-0">{ov.cajas_b} cj</div>}
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="text-sm text-brand-400">—</div>
@@ -1409,6 +1301,8 @@ export function ViajeDetail({
   // Paso del modal: null = elegir opción · luego "catalogo" o "manual".
   const [rangoOpcion, setRangoOpcion] = useState<null | "catalogo" | "manual">(null);
   const [catalogoOpen, setCatalogoOpen] = useState(false);
+  // Rango del catálogo seleccionado pero aún sin confirmar (se aplica con "Aceptar").
+  const [rangoSelId, setRangoSelId] = useState<string | null>(null);
 
   // Modo actual: catálogo (ligado a un rango) · manual · automático (productos)
   const modoRango: "catalogo" | "manual" | "auto" =
@@ -1450,7 +1344,6 @@ export function ViajeDetail({
   const [detailOV, setDetailOV] = useState<OrdenVenta | null>(null);
   const [detailOVEdit, setDetailOVEdit] = useState(false);
   const [productos, setProductos] = useState<Producto[]>([]);
-  const [combinaciones, setCombinaciones] = useState<ProductoCombinacion[]>([]);
   const [clientes, setClientes] = useState<ClienteConCedis[]>([]);
   const [lugaresOV, setLugaresOV] = useState<{ id: string; nombre: string }[]>([]);
   const [usuarios, setUsuarios] = useState<
@@ -1467,31 +1360,11 @@ export function ViajeDetail({
     .reverse()
     .map((l) => ({ lat: Number(l.lat), lng: Number(l.lng) }));
 
-  const tempRanges = useMemo(
-    () => ordenes.map((o) => o.producto).filter(Boolean) as Producto[],
-    [ordenes]
-  );
-  // Rango efectivo: si el viaje tiene su propio rango (ambos definidos), manda;
-  // si no, se deriva de los productos de las OVs (retrocompatible, igual que el sync).
+  // Rango efectivo: SOLO el rango propio del viaje (manual o catálogo). Los
+  // productos ya no tienen temperatura (Fase 4); si no hay rango, queda vacío.
   const hasViajeRange = viaje.temp_min != null && viaje.temp_max != null;
-  const tempMin = useMemo(
-    () =>
-      hasViajeRange
-        ? Number(viaje.temp_min)
-        : tempRanges.length > 0
-          ? Math.max(...tempRanges.map((p) => Number(p.temp_min)))
-          : null,
-    [hasViajeRange, viaje.temp_min, tempRanges]
-  );
-  const tempMax = useMemo(
-    () =>
-      hasViajeRange
-        ? Number(viaje.temp_max)
-        : tempRanges.length > 0
-          ? Math.min(...tempRanges.map((p) => Number(p.temp_max)))
-          : null,
-    [hasViajeRange, viaje.temp_max, tempRanges]
-  );
+  const tempMin = hasViajeRange ? Number(viaje.temp_min) : null;
+  const tempMax = hasViajeRange ? Number(viaje.temp_max) : null;
 
   // Abre el editor de rango precargando el rango efectivo actual (en °F) y carga
   // el catálogo de rangos (una sola vez) para el selector.
@@ -1502,6 +1375,7 @@ export function ViajeDetail({
     });
     setRangoOpcion(null);
     setCatalogoOpen(false);
+    setRangoSelId(viaje.temp_rango_id ?? null);
     setEditingRango(true);
     if (rangosCatalogo.length === 0) {
       const j = await fetch("/api/rangos").then((r) => r.json()).catch(() => ({}));
@@ -1590,12 +1464,6 @@ export function ViajeDetail({
         fetch("/api/productos")
           .then((r) => r.json())
           .then((j) => setProductos(j.data ?? []))
-      );
-    if (combinaciones.length === 0)
-      fetches.push(
-        fetch("/api/productos/combinaciones")
-          .then((r) => r.json())
-          .then((j) => setCombinaciones(j.data ?? []))
       );
     if (clientes.length === 0)
       fetches.push(
@@ -1854,9 +1722,9 @@ export function ViajeDetail({
                         disabled={savingRango}
                         className={`${fieldCls} bg-white flex items-center justify-between text-left`}
                       >
-                        <span className={viaje.temp_rango_id ? "text-brand-900" : "text-brand-300"}>
+                        <span className={rangoSelId ? "text-brand-900" : "text-brand-300"}>
                           {(() => {
-                            const sel = rangosCatalogo.find((r) => r.id === viaje.temp_rango_id);
+                            const sel = rangosCatalogo.find((r) => r.id === rangoSelId);
                             return sel
                               ? `${(cToF(sel.temp_min) as number).toFixed(0)}–${(cToF(sel.temp_max) as number).toFixed(0)}°F`
                               : "— Selecciona un rango —";
@@ -1875,8 +1743,8 @@ export function ViajeDetail({
                               key={r.id}
                               type="button"
                               onClick={() => {
+                                setRangoSelId(r.id);
                                 setCatalogoOpen(false);
-                                selectRangoCatalogo(r.id);
                               }}
                               className="w-full text-left px-3 py-2 border-b border-brand-50 last:border-0 hover:bg-brand-50 transition"
                             >
@@ -1945,6 +1813,15 @@ export function ViajeDetail({
                   {savingRango ? "Guardando…" : "Guardar"}
                 </button>
               )}
+              {rangoOpcion === "catalogo" && rangoSelId && (
+                <button
+                  onClick={() => selectRangoCatalogo(rangoSelId)}
+                  disabled={savingRango}
+                  className="rounded-xl bg-brand-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60 transition shadow-sm"
+                >
+                  {savingRango ? "Guardando…" : "Aceptar"}
+                </button>
+              )}
               {rangoOpcion !== null && (
                 <button
                   type="button"
@@ -1954,13 +1831,15 @@ export function ViajeDetail({
                   Atrás
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setEditingRango(false)}
-                className="text-sm text-brand-500 hover:text-brand-900 transition"
-              >
-                Cancelar
-              </button>
+              {!(rangoOpcion === "catalogo" && rangoSelId) && (
+                <button
+                  type="button"
+                  onClick={() => setEditingRango(false)}
+                  className="text-sm text-brand-500 hover:text-brand-900 transition"
+                >
+                  Cancelar
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2085,7 +1964,6 @@ export function ViajeDetail({
           ov={detailOV}
           viaje_id={viaje.id}
           productos={productos}
-          combinaciones={combinaciones}
           clientes={clientes}
           initialEditing={detailOVEdit}
           onClose={() => setDetailOV(null)}
@@ -2182,7 +2060,6 @@ export function ViajeDetail({
               viaje_id={viaje.id}
               editingOV={editingOVPanel}
               productos={productos}
-              combinaciones={combinaciones}
               clientes={clientes}
               lugaresCarga={lugaresOV}
               onSaved={handleOVSaved}
@@ -2256,10 +2133,9 @@ export function ViajeDetail({
                             {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                           </td>
                           <td className="px-4 py-3 hidden lg:table-cell text-xs text-brand-500">
-                            {ov.producto?.nombre ??
-                              (ov.combo
-                                ? `${ov.combo.producto_a.nombre} + ${ov.combo.producto_b.nombre}`
-                                : "—")}
+                            {(ov.productos ?? []).length > 0
+                              ? (ov.productos ?? []).map((p) => p.producto?.nombre ?? "—").join(", ")
+                              : "—"}
                           </td>
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <select
@@ -2518,7 +2394,7 @@ export function ViajeDetail({
                   ? "Catálogo de temperaturas"
                   : modoRango === "manual"
                     ? "Manual (definido en el viaje)"
-                    : "Automático (productos de las OVs)"}
+                    : "Sin rango asignado"}
               </div>
               <button
                 onClick={openEditRango}

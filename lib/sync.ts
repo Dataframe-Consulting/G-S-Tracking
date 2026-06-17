@@ -12,34 +12,17 @@ type ViajeRow = {
   alerta_activa: boolean;
   temp_min: number | null;
   temp_max: number | null;
-  ordenes_venta: Array<{
-    status: Status;
-    produto: { temp_min: number; temp_max: number } | null;
-  }>;
+  ordenes_venta: Array<{ status: Status }>;
 };
 
-// Rango efectivo del viaje. Si el viaje tiene su PROPIO rango (temp_min y temp_max
-// definidos), ese manda. Si no, se cae al cálculo viejo: intersección más
-// restrictiva de los rangos de los productos de las OVs (retrocompatible).
+// Rango efectivo del viaje: SOLO el rango propio del viaje (manual o de catálogo).
+// Los productos ya no tienen temperatura (Fase 4): si el viaje no tiene rango,
+// no hay rango → no se evalúan alertas hasta que el operador lo asigne.
 function getTempRange(viaje: ViajeRow) {
   if (viaje.temp_min != null && viaje.temp_max != null) {
     return { productTempMin: Number(viaje.temp_min), productTempMax: Number(viaje.temp_max) };
   }
-
-  const productos = viaje.ordenes_venta
-    .map((o) => (Array.isArray(o.produto) ? o.produto[0] : o.produto))
-    .filter(Boolean) as Array<{ temp_min: number; temp_max: number }>;
-
-  return {
-    productTempMin:
-      productos.length > 0
-        ? Math.max(...productos.map((p) => Number(p.temp_min)))
-        : undefined,
-    productTempMax:
-      productos.length > 0
-        ? Math.min(...productos.map((p) => Number(p.temp_max)))
-        : undefined,
-  };
+  return { productTempMin: undefined, productTempMax: undefined };
 }
 
 type DeviceReadings = { termografoId: string; readings: CopelandReading[] };
@@ -143,7 +126,7 @@ async function loadViajes(
 ): Promise<ViajeRow[]> {
   let q = supabase
     .from("termografos")
-    .select(`id, viaje_id, viajes!inner(id, alerta_activa, temp_min, temp_max, ordenes_venta(status, produto:productos(temp_min, temp_max)))`)
+    .select(`id, viaje_id, viajes!inner(id, alerta_activa, temp_min, temp_max, ordenes_venta(status))`)
     .eq("asignado", true);
 
   if (viajeId) q = q.eq("viaje_id", viajeId);

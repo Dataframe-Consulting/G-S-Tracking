@@ -215,11 +215,9 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                       {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-500">
-                      {ov.producto
-                        ? ov.producto.nombre
-                        : ov.combo
-                          ? `${ov.combo.producto_a.nombre} + ${ov.combo.producto_b.nombre}`
-                          : "—"}
+                      {(ov.productos ?? []).length > 0
+                        ? (ov.productos ?? []).map((p) => p.producto?.nombre ?? "—").join(", ")
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_CLASSES[ov.status]}`}>
@@ -639,7 +637,6 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                 <tbody className="divide-y divide-brand-50">
                   {filtered.map(({ viaje: v, ovs }) => {
                     const ovCount = ovs.length;
-                    const firstProducto = ovs[0]?.producto;
                     const clientes = unique(ovs.map((o) => o.cliente));
                     const cedis = unique(
                       ovs.map((o) => o.cedi).filter(Boolean) as string[]
@@ -742,8 +739,8 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           {(v.termografos ?? []).length > 0 ? (
                             <TempIndicator
                               value={v.temp_carga ?? v.temp_actual}
-                              min={v.temp_min ?? firstProducto?.temp_min}
-                              max={v.temp_max ?? firstProducto?.temp_max}
+                              min={v.temp_min}
+                              max={v.temp_max}
                             />
                           ) : (
                             <button

@@ -4,6 +4,8 @@ import { STATUS_VALUES, STATUS_LABELS, type Status } from "@/lib/types";
 import { logAudit, logAuditMany, STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit";
 import { to12h } from "@/lib/time";
 
+const OV_SELECT = `*, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre))`;
+
 const OV_FIELD_LABELS: Record<string, string> = {
   ov_ref: "OV/REF",
   cliente: "cliente",
@@ -17,8 +19,6 @@ const OV_FIELD_LABELS: Record<string, string> = {
   folio_cita: "folio de cita",
   factura_gys: "factura GyS",
   instrucciones: "instrucciones",
-  cajas: "cajas",
-  cajas_b: "cajas (B)",
 };
 
 function statusLabel(value: unknown): string {
@@ -45,7 +45,7 @@ export async function PATCH(
   const { data: prev } = await supabase
     .from("ordenes_venta")
     .select(
-      "ov_ref, cliente, cedi, fecha_carga, lugar_carga, fecha_entrega, lugar_entrega, cita, tiene_cita, po, folio_cita, factura_gys, status, instrucciones, producto_id, producto_combinacion_id, cajas, cajas_b"
+      "ov_ref, cliente, cedi, fecha_carga, lugar_carga, fecha_entrega, lugar_entrega, cita, tiene_cita, po, folio_cita, factura_gys, status, instrucciones"
     )
     .eq("id", params.ovId)
     .eq("viaje_id", params.id)
@@ -67,22 +67,40 @@ export async function PATCH(
     "factura_gys",
     "status",
     "instrucciones",
-    "producto_id",
-    "producto_combinacion_id",
-    "cajas",
-    "cajas_b",
   ];
   for (const k of allowed) if (k in body) update[k] = body[k];
   for (const k of ["ov_ref", "fecha_entrega", "cita", "po", "folio_cita", "factura_gys"]) {
     if (k in update && !update[k]) update[k] = null;
   }
 
-  const { data, error } = await supabase
+  await supabase
     .from("ordenes_venta")
     .update(update)
     .eq("id", params.ovId)
+    .eq("viaje_id", params.id);
+
+  // Productos (Fase 5): si vienen en el body, se reemplaza el set completo.
+  let productosCambio = false;
+  if (Array.isArray(body.productos)) {
+    productosCambio = true;
+    const nuevos = (body.productos as { producto_id?: string; cajas?: number | null }[])
+      .filter((p) => p && p.producto_id)
+      .map((p) => ({
+        orden_id: params.ovId,
+        producto_id: p.producto_id as string,
+        cajas: p.cajas != null ? Number(p.cajas) : null,
+      }));
+    await supabase.from("orden_productos").delete().eq("orden_id", params.ovId);
+    if (nuevos.length > 0) {
+      await supabase.from("orden_productos").insert(nuevos);
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("ordenes_venta")
+    .select(OV_SELECT)
+    .eq("id", params.ovId)
     .eq("viaje_id", params.id)
-    .select(`*, producto:productos(id, nombre, temp_min, temp_max), combo:producto_combinaciones!producto_combinacion_id(id, temp_min, temp_max, producto_a:productos!producto_a_id(id,nombre), producto_b:productos!producto_b_id(id,nombre))`)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -98,12 +116,8 @@ export async function PATCH(
       );
     }
 
-    const productoCambio =
-      ("producto_id" in body && (prev.producto_id ?? null) !== (data.producto_id ?? null)) ||
-      ("producto_combinacion_id" in body &&
-        (prev.producto_combinacion_id ?? null) !== (data.producto_combinacion_id ?? null));
-    if (productoCambio) {
-      descripciones.push(`Cambió producto de OV ${ref}`);
+    if (productosCambio) {
+      descripciones.push(`Cambió productos de OV ${ref}`);
     }
 
     for (const campo of Object.keys(OV_FIELD_LABELS)) {

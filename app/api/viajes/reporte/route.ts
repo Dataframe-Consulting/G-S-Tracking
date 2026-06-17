@@ -44,12 +44,7 @@ export async function POST(req: Request) {
       linea:lineas_transportista!linea_transportista_id ( nombre, concesionario:concesionarios!concesionario_id ( nombre ) ),
       ordenes_venta (
         *,
-        producto:productos(id, nombre, temp_min, temp_max),
-        combo:producto_combinaciones!producto_combinacion_id(
-          id, temp_min, temp_max,
-          producto_a:productos!producto_a_id(id, nombre),
-          producto_b:productos!producto_b_id(id, nombre)
-        )
+        productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre))
       )
     `)
     .in("id", viajeIds);
@@ -70,38 +65,36 @@ export async function POST(req: Request) {
     const responsableNombre = v.responsable?.nombre ?? v.responsable?.email ?? null;
 
     for (const ov of ovs) {
-      let producto = null;
-      if (ov.producto) {
-        producto = ov.producto.nombre;
-      } else if (ov.combo) {
-        const a = ov.combo.producto_a?.nombre ?? "";
-        const b = ov.combo.producto_b?.nombre ?? "";
-        producto = `${a} + ${b}`;
-      }
+      // Una fila por producto de la OV (Fase 5). Si la OV no tiene productos,
+      // igual sale una fila con producto/cajas vacíos.
+      const lineas = (ov.productos ?? []).length > 0
+        ? (ov.productos ?? [])
+        : [{ producto: null, cajas: null } as { producto?: { nombre: string } | null; cajas: number | null }];
 
-      rows.push({
-        "OV / Ref": ov.ov_ref,
-        "Cliente": ov.cliente,
-        "CEDI": ov.cedi ?? null,
-        "Fecha Carga": ov.fecha_carga,
-        "Lugar Carga": ov.lugar_carga,
-        "Fecha Entrega": ov.fecha_entrega,
-        "Lugar Entrega": ov.lugar_entrega,
-        "Cita": to12h(ov.cita) ?? null,
-        "Status": STATUS_LABELS[ov.status] ?? ov.status,
-        "Instrucciones": ov.instrucciones ?? null,
-        "Producto": producto,
-        "Cajas": ov.cajas ?? null,
-        "Cajas B": ov.cajas_b ?? null,
-        "# Viaje": v.numero,
-        "Origen": v.lugar_inicio,
-        "Destino": v.lugar_fin,
-        "Fecha Inicio": v.fecha_inicio,
-        "Fecha Fin": v.fecha_fin,
-        "Flete": v.linea?.concesionario?.nombre ?? v.flete_cargo ?? null,
-        "Responsable": responsableNombre,
-        "Temperatura Actual": v.temp_actual ?? null,
-      });
+      for (const linea of lineas) {
+        rows.push({
+          "OV / Ref": ov.ov_ref,
+          "Cliente": ov.cliente,
+          "CEDI": ov.cedi ?? null,
+          "Fecha Carga": ov.fecha_carga,
+          "Lugar Carga": ov.lugar_carga,
+          "Fecha Entrega": ov.fecha_entrega,
+          "Lugar Entrega": ov.lugar_entrega,
+          "Cita": to12h(ov.cita) ?? null,
+          "Status": STATUS_LABELS[ov.status] ?? ov.status,
+          "Instrucciones": ov.instrucciones ?? null,
+          "Producto": linea.producto?.nombre ?? null,
+          "Cajas": linea.cajas ?? null,
+          "# Viaje": v.numero,
+          "Origen": v.lugar_inicio,
+          "Destino": v.lugar_fin,
+          "Fecha Inicio": v.fecha_inicio,
+          "Fecha Fin": v.fecha_fin,
+          "Flete": v.linea?.concesionario?.nombre ?? v.flete_cargo ?? null,
+          "Responsable": responsableNombre,
+          "Temperatura Actual": v.temp_actual ?? null,
+        });
+      }
     }
   }
 
@@ -122,7 +115,6 @@ export async function POST(req: Request) {
     { wch: 30 },  // Instrucciones
     { wch: 24 },  // Producto
     { wch: 8 },   // Cajas
-    { wch: 8 },   // Cajas B
     { wch: 8 },   // # Viaje
     { wch: 16 },  // Origen
     { wch: 16 },  // Destino

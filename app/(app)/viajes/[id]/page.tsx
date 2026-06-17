@@ -11,7 +11,7 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
 
   const { data: viaje } = await supabase
     .from("viajes")
-    .select(`*, responsable:user_profiles!responsable_id(id, nombre, email), linea:lineas_transportista!linea_transportista_id ( id, nombre, concesionario:concesionarios!concesionario_id ( id, nombre ) ), ordenes_venta ( *, producto:productos(id, nombre, temp_min, temp_max), combo:producto_combinaciones!producto_combinacion_id(id, temp_min, temp_max, producto_a:productos!producto_a_id(id, nombre), producto_b:productos!producto_b_id(id, nombre)) )`)
+    .select(`*, responsable:user_profiles!responsable_id(id, nombre, email), linea:lineas_transportista!linea_transportista_id ( id, nombre, concesionario:concesionarios!concesionario_id ( id, nombre ) ), ordenes_venta ( *, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre)) )`)
     .eq("id", params.id)
     .maybeSingle();
 

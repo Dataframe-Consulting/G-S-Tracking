@@ -44,7 +44,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const supabase = createServerSupabase();
   const { data, error } = await supabase
     .from("viajes")
-    .select(`*, responsable:user_profiles!responsable_id(id, nombre, email), ordenes_venta ( *, produto:productos(id, nombre, temp_min, temp_max), combo:produto_combinaciones!produto_combinacion_id(id, temp_min, temp_max, produto_a:productos!produto_a_id(id, nombre), produto_b:productos!produto_b_id(id, nombre)) )`)
+    .select(`*, responsable:user_profiles!responsable_id(id, nombre, email), ordenes_venta ( *, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre)) )`)
     .eq("id", params.id)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
