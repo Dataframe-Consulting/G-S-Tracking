@@ -92,7 +92,6 @@ export async function POST(req: Request) {
           "Fecha Fin": v.fecha_fin,
           "Flete": v.linea?.concesionario?.nombre ?? v.flete_cargo ?? null,
           "Responsable": responsableNombre,
-          "Temperatura Actual": v.temp_actual ?? null,
         });
       }
     }
@@ -122,7 +121,6 @@ export async function POST(req: Request) {
     { wch: 12 },  // Fecha Fin
     { wch: 18 },  // Flete
     { wch: 20 },  // Responsable
-    { wch: 12 },  // Temperatura Actual
   ];
   ws["!cols"] = colWidths;
 

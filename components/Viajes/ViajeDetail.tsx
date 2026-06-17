@@ -163,9 +163,9 @@ function ProductosEditor({
           <select
             value={r.producto_id}
             onChange={(e) => setRow(i, { producto_id: e.target.value })}
-            className={`${fieldCls} bg-white flex-1`}
+            className="w-64 max-w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
           >
-            <option value="">— Selecciona producto —</option>
+            <option value="">Producto</option>
             {productos.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre}
@@ -178,7 +178,7 @@ function ProductosEditor({
             value={r.cajas}
             onChange={(e) => setRow(i, { cajas: e.target.value })}
             placeholder="cajas"
-            className={`${fieldCls} w-24`}
+            className="w-20 shrink-0 rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
           />
           {rows.length > 1 && (
             <button

@@ -162,7 +162,7 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-2xl max-h-[80vh] flex flex-col"
+        className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-3xl max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-brand-50">
@@ -215,9 +215,20 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                       {ov.cedi && <div className="text-brand-400">{ov.cedi}</div>}
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell text-xs text-brand-500">
-                      {(ov.productos ?? []).length > 0
-                        ? (ov.productos ?? []).map((p) => p.producto?.nombre ?? "—").join(", ")
-                        : "—"}
+                      {(ov.productos ?? []).length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {(ov.productos ?? []).map((p) => (
+                            <span key={p.id} className="whitespace-nowrap">
+                              {p.producto?.nombre ?? "—"}
+                              {p.cajas != null && (
+                                <span className="text-brand-400"> · {p.cajas} cj</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_CLASSES[ov.status]}`}>
