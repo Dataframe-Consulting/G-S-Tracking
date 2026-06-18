@@ -63,6 +63,72 @@ function ChartCard({
   );
 }
 
+// Barras horizontales: cada categoría en su propio renglón (nombre legible),
+// la barra crece hacia la derecha. Ideal para nombres largos en móvil.
+function HorizontalBars({
+  data,
+  fill,
+}: {
+  data: { label: string; count: number }[];
+  fill: string;
+}) {
+  const height = Math.max(140, data.length * 36 + 16);
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+        <XAxis
+          type="number"
+          allowDecimals={false}
+          tick={{ fontSize: 11, fill: "#4a8c1c" }}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          type="category"
+          dataKey="label"
+          tick={{ fontSize: 11, fill: "#1a2e05" }}
+          tickLine={false}
+          axisLine={false}
+          width={110}
+          interval={0}
+          tickFormatter={(v: string) => (v.length > 16 ? v.slice(0, 16) + "…" : v)}
+        />
+        <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #d1fae5", fontSize: 12 }} />
+        <Bar dataKey="count" name="Cargas" fill={fill} radius={[0, 4, 4, 0]} barSize={18} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// Barras verticales (versión original, para desktop).
+function VerticalBars({
+  data,
+  fill,
+}: {
+  data: { label: string; count: number }[];
+  fill: string;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart data={data} margin={{ top: 4, right: 8, bottom: 8, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+        <XAxis
+          dataKey="label"
+          tick={{ fontSize: 10, fill: "#4a8c1c" }}
+          tickLine={false}
+          axisLine={false}
+          interval={0}
+          tickFormatter={(v: string) => (v.length > 12 ? v.slice(0, 12) + "…" : v)}
+        />
+        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#4a8c1c" }} tickLine={false} axisLine={false} width={28} />
+        <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #d1fae5", fontSize: 12 }} />
+        <Bar dataKey="count" name="Cargas" fill={fill} radius={[4, 4, 0, 0]} barSize={28} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function DashboardCharts({
   byFecha,
   byTransportista,
@@ -72,6 +138,9 @@ export function DashboardCharts({
   byTransportista: ChartTransportistaRow[];
   byCliente: ChartClienteRow[];
 }) {
+  const transportistaData = byTransportista.map((r) => ({ label: r.transportista, count: r.count }));
+  const clienteData = byCliente.map((r) => ({ label: r.cliente, count: r.count }));
+
   return (
     <div className="space-y-4">
       {/* Cargas vs Fecha */}
@@ -117,66 +186,24 @@ export function DashboardCharts({
       </ChartCard>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Cargas por transportista */}
+        {/* Cargas por transportista — horizontal en móvil, vertical en desktop */}
         <ChartCard title="Cargas por transportista">
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart
-              data={byTransportista}
-              margin={{ top: 4, right: 8, bottom: 8, left: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis
-                dataKey="transportista"
-                tick={{ fontSize: 10, fill: "#4a8c1c" }}
-                tickLine={false}
-                axisLine={false}
-                interval={0}
-                tickFormatter={(v: string) => v.length > 12 ? v.slice(0, 12) + "…" : v}
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fontSize: 11, fill: "#4a8c1c" }}
-                tickLine={false}
-                axisLine={false}
-                width={28}
-              />
-              <Tooltip
-                contentStyle={{ borderRadius: 12, border: "1px solid #d1fae5", fontSize: 12 }}
-              />
-              <Bar dataKey="count" name="Cargas" fill={BRAND[500]} radius={[4, 4, 0, 0]} barSize={28} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="md:hidden">
+            <HorizontalBars data={transportistaData} fill={BRAND[500]} />
+          </div>
+          <div className="hidden md:block">
+            <VerticalBars data={transportistaData} fill={BRAND[500]} />
+          </div>
         </ChartCard>
 
-        {/* Top clientes */}
+        {/* Top clientes — horizontal en móvil, vertical en desktop */}
         <ChartCard title="Cargas por cliente (top 8)">
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart
-              data={byCliente}
-              margin={{ top: 4, right: 8, bottom: 8, left: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis
-                dataKey="cliente"
-                tick={{ fontSize: 10, fill: "#4a8c1c" }}
-                tickLine={false}
-                axisLine={false}
-                interval={0}
-                tickFormatter={(v: string) => v.length > 12 ? v.slice(0, 12) + "…" : v}
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fontSize: 11, fill: "#4a8c1c" }}
-                tickLine={false}
-                axisLine={false}
-                width={28}
-              />
-              <Tooltip
-                contentStyle={{ borderRadius: 12, border: "1px solid #d1fae5", fontSize: 12 }}
-              />
-              <Bar dataKey="count" name="Cargas" fill={BRAND[700]} radius={[4, 4, 0, 0]} barSize={28} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="md:hidden">
+            <HorizontalBars data={clienteData} fill={BRAND[700]} />
+          </div>
+          <div className="hidden md:block">
+            <VerticalBars data={clienteData} fill={BRAND[700]} />
+          </div>
         </ChartCard>
       </div>
     </div>

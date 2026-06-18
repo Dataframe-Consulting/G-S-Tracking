@@ -12,8 +12,14 @@ const alertIcon = (
   </svg>
 );
 
-// Acento (línea superior) por status — mismos colores que los badges de la app.
-const statusAccent: Record<Status, string> = {
+const alertIconSm = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/>
+  </svg>
+);
+
+// Color (línea/punto) por status — mismos colores que los badges de la app.
+const statusColor: Record<Status, string> = {
   PENDIENTE: "bg-slate-400",
   EN_PREPARACION: "bg-blue-500",
   TRANSITO: "bg-amber-500",
@@ -67,36 +73,64 @@ export function KpiCards({
   porStatus: Record<Status, number>;
 }) {
   return (
-    <div className="space-y-3">
-      {/* Resumen: total de cargas + alertas (métrica transversal, no suma al total) */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card label="Cargas totales" value={total} accentBg="bg-brand-900" icon={truckIcon} />
-        <Card
-          label="Alertas activas"
-          value={alertas}
-          accentBg="bg-red-500"
-          icon={alertIcon}
-          highlight
-          subtitle="Viajes con temperatura fuera de rango"
-        />
-      </div>
-
-      {/* Desglose por estatus — la suma de estas tarjetas = Cargas totales */}
-      <div>
-        <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2 px-0.5">
-          Por estatus
+    <>
+      {/* ── Móvil (<md): compacto con chips ── */}
+      <div className="md:hidden bg-white border border-brand-100 rounded-2xl shadow-sm p-4 space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-xs font-medium text-brand-400">Cargas totales</div>
+            <div className="text-3xl font-display font-bold text-brand-900 tabular-nums leading-none mt-0.5">
+              {total}
+            </div>
+          </div>
+          <div
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold ${
+              alertas > 0 ? "bg-red-50 text-red-700" : "bg-brand-50 text-brand-400"
+            }`}
+            title="Viajes con temperatura fuera de rango"
+          >
+            {alertIconSm}
+            {alertas} alerta{alertas !== 1 ? "s" : ""}
+          </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="flex flex-wrap gap-2 pt-1 border-t border-brand-50">
           {STATUS_VALUES.map((s) => (
-            <Card
+            <span
               key={s}
-              label={STATUS_LABELS[s]}
-              value={porStatus[s] ?? 0}
-              accentBg={statusAccent[s]}
-            />
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-600"
+            >
+              <span className={`w-2 h-2 rounded-full ${statusColor[s]}`} />
+              {STATUS_LABELS[s]}
+              <span className="font-bold text-brand-900 tabular-nums">{porStatus[s] ?? 0}</span>
+            </span>
           ))}
         </div>
       </div>
-    </div>
+
+      {/* ── Desktop (md+): tarjetas grandes (original) ── */}
+      <div className="hidden md:block space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Card label="Cargas totales" value={total} accentBg="bg-brand-900" icon={truckIcon} />
+          <Card
+            label="Alertas activas"
+            value={alertas}
+            accentBg="bg-red-500"
+            icon={alertIcon}
+            highlight
+            subtitle="Viajes con temperatura fuera de rango"
+          />
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2 px-0.5">
+            Por estatus
+          </div>
+          <div className="grid grid-cols-3 lg:grid-cols-5 gap-3">
+            {STATUS_VALUES.map((s) => (
+              <Card key={s} label={STATUS_LABELS[s]} value={porStatus[s] ?? 0} accentBg={statusColor[s]} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
