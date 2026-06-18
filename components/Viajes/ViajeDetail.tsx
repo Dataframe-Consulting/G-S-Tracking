@@ -1980,12 +1980,12 @@ export function ViajeDetail({
       )}
 
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="font-mono text-xs text-brand-400 mb-1">
             Viaje #{String(viaje.numero).padStart(4, "0")}
           </div>
-          <h1 className="font-display font-bold text-2xl text-brand-900 tracking-tight">
+          <h1 className="font-display font-bold text-xl sm:text-2xl text-brand-900 tracking-tight break-words">
             {viaje.lugar_inicio}
             <span className="text-brand-300 mx-2.5">→</span>
             {viaje.lugar_fin}
@@ -1994,7 +1994,7 @@ export function ViajeDetail({
             {formatFecha(viaje.fecha_inicio)} — {formatFecha(viaje.fecha_fin)}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-col items-start sm:items-end gap-2 shrink-0">
           {editingViaje ? (
             <div className="flex gap-2">
               <button
@@ -2083,7 +2083,68 @@ export function ViajeDetail({
           ) : (
             ordenes.length > 0 && (
               <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
+                {/* Móvil (<sm): tarjetas con toda la info */}
+                <div className="sm:hidden divide-y divide-brand-50">
+                  {ordenes.map((ov) => (
+                    <div
+                      key={ov.id}
+                      onClick={() => openOVDetail(ov)}
+                      className="px-4 py-3 space-y-1.5 active:bg-brand-50/40 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">
+                          {ov.ov_ref}
+                        </span>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={ov.status}
+                            onChange={(e) => updateOVStatus(ov, e.target.value as Status)}
+                            className="text-xs rounded-lg border border-brand-200 px-2 py-1 bg-white text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                          >
+                            {STATUS_VALUES.map((s) => (
+                              <option key={s} value={s}>
+                                {STATUS_LABELS[s]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="font-medium text-brand-900 text-sm">{ov.cliente}</div>
+                      <div className="text-xs text-brand-600">
+                        <span className="text-brand-400">Carga: </span>
+                        {formatFecha(ov.fecha_carga)} · {ov.lugar_carga}
+                      </div>
+                      <div className="text-xs text-brand-600">
+                        <span className="text-brand-400">Cita: </span>
+                        {ov.tiene_cita && ov.fecha_entrega
+                          ? `${formatFecha(ov.fecha_entrega)}${ov.cita ? ` · ${to12h(ov.cita)}` : ""}`
+                          : "—"}
+                        {ov.cedi ? ` · ${ov.cedi}` : ""}
+                      </div>
+                      <div className="text-xs text-brand-500">
+                        <span className="text-brand-400">Producto: </span>
+                        {(ov.productos ?? []).length > 0
+                          ? (ov.productos ?? []).map((p) => p.producto?.nombre ?? "—").join(", ")
+                          : "—"}
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={async () => {
+                            await loadFormData();
+                            setShowOVForm(false);
+                            setEditingOVPanel(ov);
+                          }}
+                          className="text-xs text-brand-500 hover:text-brand-900 transition"
+                        >
+                          Editar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* sm+: tabla */}
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="bg-brand-50 text-xs uppercase tracking-widest text-brand-400">

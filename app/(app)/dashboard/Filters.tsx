@@ -38,8 +38,8 @@ export function DashboardFilters({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 bg-white border border-brand-100 rounded-2xl px-4 py-3 shadow-sm">
-      <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">
+    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 bg-white border border-brand-100 rounded-2xl px-4 py-3 shadow-sm">
+      <label className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm text-brand-700 font-medium w-full sm:w-auto">
         Periodo
         <DateRangePicker
           desde={fechaDesde}
@@ -48,12 +48,12 @@ export function DashboardFilters({
           clearable={false}
         />
       </label>
-      <label className="flex items-center gap-2 text-sm text-brand-700 font-medium">
+      <label className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm text-brand-700 font-medium w-full sm:w-auto">
         Producto
         <select
           value={productoId}
           onChange={(e) => updateParam("producto_id", e.target.value)}
-          className={`${input} bg-white`}
+          className={`${input} bg-white w-full sm:w-auto`}
         >
           <option value="">Todos</option>
           {productos.map((p) => (
@@ -65,7 +65,7 @@ export function DashboardFilters({
       </label>
       <button
         onClick={() => router.push("/dashboard")}
-        className="text-xs text-brand-400 hover:text-brand-700 underline underline-offset-2 transition"
+        className="text-xs text-brand-400 hover:text-brand-700 underline underline-offset-2 transition self-start sm:self-auto"
       >
         Limpiar filtros
       </button>

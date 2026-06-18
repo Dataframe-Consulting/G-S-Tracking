@@ -33,7 +33,47 @@ export default async function AlertasPage() {
       </div>
 
       <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Móvil (<md): tarjetas */}
+        <div className="md:hidden divide-y divide-brand-50">
+          {rows.length === 0 ? (
+            <div className="px-4 py-12 text-center text-brand-400 text-sm">Sin alertas registradas.</div>
+          ) : (
+            rows.map((a) => (
+              <div key={a.id} className="px-4 py-3 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm">
+                    {a.tipo === "TEMP_ALTA" ? (
+                      <span className="text-red-600">🔴 ALTA</span>
+                    ) : (
+                      <span className="text-blue-600">🔵 BAJA</span>
+                    )}
+                    <span className="ml-2 font-semibold text-brand-900 tabular-nums">
+                      {a.temperatura != null ? `${(cToF(Number(a.temperatura)) as number).toFixed(1)}°F` : "—"}
+                    </span>
+                  </span>
+                  {a.whatsapp_sid ? (
+                    <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">Enviado</span>
+                  ) : (
+                    <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full">Sin envío</span>
+                  )}
+                </div>
+                <div className="text-xs text-brand-500 tabular-nums">{formatFechaHora(a.created_at)}</div>
+                {a.viaje && (
+                  <Link href={`/viajes/${a.viaje.id}`} className="block text-brand-700 hover:text-accent transition-colors">
+                    <span className="font-mono text-xs">#{String(a.viaje.numero).padStart(4, "0")}</span>
+                    <span className="text-sm ml-2">{a.viaje.lugar_inicio} → {a.viaje.lugar_fin}</span>
+                  </Link>
+                )}
+                <div className="text-xs text-brand-400 font-mono">
+                  <span className="text-brand-300">Destinatario: </span>{a.enviado_a ?? "—"}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* md+: tabla */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-brand-900 text-brand-50 text-xs uppercase tracking-widest">

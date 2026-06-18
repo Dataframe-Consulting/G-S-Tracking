@@ -189,7 +189,39 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
           {ovs.length === 0 ? (
             <p className="text-sm text-brand-400 text-center py-10">Sin órdenes de venta.</p>
           ) : (
-            <table className="min-w-full text-sm">
+            <>
+            {/* Móvil (<sm): tarjetas con toda la info */}
+            <div className="sm:hidden divide-y divide-brand-50">
+              {ovs.map((ov) => (
+                <div key={ov.id} className="px-4 py-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">
+                      {ov.ov_ref}
+                    </span>
+                    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_CLASSES[ov.status]}`}>
+                      {STATUS_LABELS[ov.status]}
+                    </span>
+                  </div>
+                  <div className="font-medium text-brand-900 text-sm">{ov.cliente}</div>
+                  <div className="text-xs text-brand-600">
+                    <span className="text-brand-400">Entrega: </span>
+                    {formatFecha(ov.fecha_entrega) || "—"}
+                    {ov.cedi && <span className="text-brand-400"> · {ov.cedi}</span>}
+                  </div>
+                  <div className="text-xs text-brand-500">
+                    <span className="text-brand-400">Producto: </span>
+                    {(ov.productos ?? []).length > 0
+                      ? (ov.productos ?? [])
+                          .map((p) => `${p.producto?.nombre ?? "—"}${p.cajas != null ? ` (${p.cajas} cj)` : ""}`)
+                          .join(", ")
+                      : "—"}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* sm+: tabla */}
+            <table className="hidden sm:table min-w-full text-sm">
               <thead className="sticky top-0 bg-brand-50 text-xs uppercase tracking-widest text-brand-400">
                 <tr>
                   <th className="text-left px-4 py-3 font-medium">OV / REF</th>
@@ -239,6 +271,7 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </div>
       </div>
@@ -628,7 +661,105 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
             <p className="text-sm text-brand-400 mt-1">No hay viajes que coincidan con los filtros aplicados.</p>
           </div>
         ) : (
-          <div className="rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
+          <>
+          {/* ── Vista móvil: tarjetas apiladas (<md) ── */}
+          <div className="md:hidden space-y-2.5">
+            {filtered.map(({ viaje: v, ovs }) => {
+              const ovCount = ovs.length;
+              const clientes = unique(ovs.map((o) => o.cliente));
+              const clientesLabel =
+                clientes.length === 0
+                  ? null
+                  : clientes.length <= 2
+                  ? clientes.join(", ")
+                  : `${clientes.slice(0, 2).join(", ")} +${clientes.length - 2}`;
+              const flete = v.linea?.concesionario?.nombre ?? v.flete_cargo ?? null;
+              return (
+                <div
+                  key={v.id}
+                  onClick={() => router.push(`/viajes/${v.id}`)}
+                  className="rounded-2xl border border-brand-100 bg-white shadow-sm p-4 active:bg-brand-50/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <NumeroViaje numero={v.numero} />
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      {(v.termografos ?? []).length > 0 ? (
+                        <TempIndicator value={v.temp_carga ?? v.temp_actual} min={v.temp_min} max={v.temp_max} />
+                      ) : (
+                        <button
+                          onClick={() => setModalViajeId(v.id)}
+                          className="rounded-lg border border-brand-200 px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 transition whitespace-nowrap"
+                        >
+                          + Termógrafo
+                        </button>
+                      )}
+                      <ResponsableAvatar responsable={v.responsable} />
+                    </div>
+                  </div>
+
+                  <div className="font-semibold text-brand-900 leading-snug">
+                    {v.lugar_inicio}
+                    <span className="text-brand-400 mx-1.5">→</span>
+                    {v.lugar_fin}
+                  </div>
+                  {clientesLabel && (
+                    <div className="mt-0.5 text-xs text-brand-500 line-clamp-1">{clientesLabel}</div>
+                  )}
+
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-brand-400 mb-0.5">Fechas</div>
+                      <div className="text-brand-700 tabular-nums">
+                        {formatFecha(v.fecha_inicio)} – {formatFecha(v.fecha_fin)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-brand-400 mb-0.5">Ubicación</div>
+                      <div className="text-brand-700">{v.ubicacion_estado ?? v.ubicacion_ciudad ?? "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-brand-400 mb-0.5">Flete</div>
+                      {flete ? (
+                        <span
+                          onClick={(e) => { e.stopPropagation(); setDatosViaje(v); }}
+                          className="inline-flex text-xs font-medium px-2 py-0.5 rounded-lg text-brand-700 bg-brand-50"
+                        >
+                          {flete}
+                        </span>
+                      ) : (
+                        <span className="text-brand-300">—</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-brand-400 mb-0.5">OVS/REF</div>
+                      {ovCount > 0 ? (
+                        <span
+                          onClick={(e) => { e.stopPropagation(); setOvsModalViaje({ ...v, ordenes_venta: ovs }); }}
+                          className="inline-flex flex-wrap gap-1 text-xs font-medium text-brand-700"
+                        >
+                          {ovs.map((o) => (
+                            <span key={o.id} className="px-2 py-0.5 rounded-lg bg-brand-50">
+                              {o.ov_ref || "—"}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-brand-300">0 OVs</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="text-xs text-brand-400 text-right px-1">
+              {anyFilter
+                ? `${filtered.length} de ${tabItems.length} viaje${tabItems.length !== 1 ? "s" : ""}`
+                : `${tabItems.length} viaje${tabItems.length !== 1 ? "s" : ""}`}
+            </div>
+          </div>
+
+          {/* ── Vista desktop: tabla (md+) ── */}
+          <div className="hidden md:block rounded-2xl border border-brand-100 bg-white shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -784,6 +915,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
               )}
             </div>
           </div>
+          </>
         )}
       </div>
     </>
