@@ -1,15 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendWhatsAppAlert } from "./twilio";
+import { sendWhatsAppAlert } from "./whatsapp-meta";
 import { cToF } from "./temperature";
 
-const COOLDOWN_MINUTES = 30;
+const COOLDOWN_MINUTES = 30; // minutos de espera entre reenvíos de la misma alerta
+const SOSTENIDO_MINUTES = 30; // minutos continuos fuera de rango antes de alertar
 
 export interface CheckAlertaResult {
   viajeId: string;
   fueraRango: boolean;
   alertaEnviada: boolean;
   cooldown: boolean;
-  motivo?: string;
+  motivo?: "viaje_not_found" | "sin_rango_o_temp" | "sin_lecturas_recientes";
 }
 
 export async function checkAlertas(
@@ -32,14 +33,65 @@ export async function checkAlertas(
     return { viajeId, fueraRango: false, alertaEnviada: false, cooldown: false, motivo: "sin_rango_o_temp" };
   }
 
-  const temp = Number(viaje.temp_actual);
-  const fueraRango = temp < tempMin || temp > tempMax;
-  const tipo: "TEMP_ALTA" | "TEMP_BAJA" = temp > tempMax ? "TEMP_ALTA" : "TEMP_BAJA";
+  // 1) Lectura más reciente del viaje (sin filtro de tiempo).
+  const { data: recientes } = await supabase
+    .from("lecturas_temperatura")
+    .select("temperatura, fuera_rango, timestamp")
+    .eq("viaje_id", viajeId)
+    .order("timestamp", { ascending: false })
+    .limit(1);
 
-  if (!fueraRango) {
+  const lecturaReciente = recientes?.[0] ?? null;
+
+  // Sin ninguna lectura registrada → no se puede evaluar; apagar alerta.
+  if (!lecturaReciente) {
+    await supabase.from("viajes").update({ alerta_activa: false }).eq("id", viajeId);
+    return { viajeId, fueraRango: false, alertaEnviada: false, cooldown: false, motivo: "sin_lecturas_recientes" };
+  }
+
+  // 2) La última lectura está dentro de rango → no alertar.
+  if (lecturaReciente.fuera_rango !== true) {
     await supabase.from("viajes").update({ alerta_activa: false }).eq("id", viajeId);
     return { viajeId, fueraRango: false, alertaEnviada: false, cooldown: false };
   }
+
+  // 3) Fuera de rango: buscar la última vez que estuvo DENTRO de rango.
+  const { data: enRango } = await supabase
+    .from("lecturas_temperatura")
+    .select("timestamp")
+    .eq("viaje_id", viajeId)
+    .eq("fuera_rango", false)
+    .order("timestamp", { ascending: false })
+    .limit(1);
+
+  const ultimaEnRango = enRango?.[0] ?? null;
+  const sostenidoAtras = Date.now() - SOSTENIDO_MINUTES * 60_000;
+
+  // Si nunca estuvo dentro de rango, usamos la lectura MÁS ANTIGUA fuera de rango
+  // para verificar que la condición lleve 30+ min (evita alertar en la 1ª lectura).
+  const { data: primeraFueraRango } = await supabase
+    .from("lecturas_temperatura")
+    .select("timestamp")
+    .eq("viaje_id", viajeId)
+    .eq("fuera_rango", true)
+    .order("timestamp", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  // 4) Cumple el mínimo sostenido fuera de rango si la última lectura en rango
+  //    (o, si nunca la hubo, la primera fuera de rango) fue hace más de SOSTENIDO_MINUTES.
+  const cumpleSostenido = ultimaEnRango
+    ? new Date(ultimaEnRango.timestamp).getTime() < sostenidoAtras
+    : (!!primeraFueraRango && new Date(primeraFueraRango.timestamp).getTime() < sostenidoAtras);
+
+  // 5) Fuera de rango pero aún no cumple el mínimo continuo → esperar (no alertar).
+  if (!cumpleSostenido) {
+    return { viajeId, fueraRango: false, alertaEnviada: false, cooldown: false };
+  }
+
+  // tipo derivado de la temperatura de la lectura más reciente (no de temp_actual).
+  const temp = Number(lecturaReciente.temperatura);
+  const tipo: "TEMP_ALTA" | "TEMP_BAJA" = temp > tempMax ? "TEMP_ALTA" : "TEMP_BAJA";
 
   await supabase.from("viajes").update({ alerta_activa: true }).eq("id", viajeId);
 
@@ -59,10 +111,10 @@ export async function checkAlertas(
   // Get OV info for the alert message (first OV with a client)
   const { data: primeraOV } = await supabase
     .from("ordenes_venta")
-    .select("ov_ref, cliente, producto:productos(nombre)")
+    .select("id, ov_ref, cliente")
     .eq("viaje_id", viajeId)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const { data: cfg } = await supabase
     .from("config")
@@ -77,15 +129,24 @@ export async function checkAlertas(
       ? `https://maps.google.com/?q=${viaje.lat},${viaje.lng}`
       : undefined;
 
-  const productoObj = primeraOV
-    ? (Array.isArray(primeraOV.producto) ? primeraOV.producto[0] : primeraOV.producto)
-    : null;
+  let productoNombre = "—";
+  if (primeraOV?.id) {
+    const { data: ordenProductos } = await supabase
+      .from("orden_productos")
+      .select("productos(nombre)")
+      .eq("orden_id", primeraOV.id)
+      .limit(3);
+    productoNombre = ordenProductos && ordenProductos.length > 0
+      ? ordenProductos.map((op: any) => (op.productos as any)?.nombre).filter(Boolean).join(", ")
+      : "—";
+  }
 
   const sendResults = await sendWhatsAppAlert(
     {
+      viajeId,
       cargaRef: primeraOV?.ov_ref ?? viajeId,
       cliente: primeraOV?.cliente ?? "—",
-      producto: productoObj?.nombre ?? "—",
+      producto: productoNombre,
       tempActual: temp,
       tempMin,
       tempMax,

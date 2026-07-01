@@ -8,10 +8,12 @@ import type { Status } from "./types";
 
 type ViajeRow = {
   id: string;
+  numero: number;
   termografo_ids: string[];
   alerta_activa: boolean;
   temp_min: number | null;
   temp_max: number | null;
+  temp_actual: number | null;
   ordenes_venta: Array<{ status: Status }>;
 };
 
@@ -126,7 +128,7 @@ async function loadViajes(
 ): Promise<ViajeRow[]> {
   let q = supabase
     .from("termografos")
-    .select(`id, viaje_id, viajes!inner(id, alerta_activa, temp_min, temp_max, ordenes_venta(status))`)
+    .select(`id, viaje_id, viajes!inner(id, numero, alerta_activa, temp_min, temp_max, temp_actual, ordenes_venta(status))`)
     .eq("asignado", true);
 
   if (viajeId) q = q.eq("viaje_id", viajeId);
@@ -146,9 +148,11 @@ async function loadViajes(
     if (!t.viaje_id) continue;
     const viajeRaw = (Array.isArray(t.viajes) ? t.viajes[0] : t.viajes) as {
       id: string;
+      numero: number;
       alerta_activa: boolean;
       temp_min: number | null;
       temp_max: number | null;
+      temp_actual: number | null;
       ordenes_venta: ViajeRow["ordenes_venta"];
     } | null;
     if (!viajeRaw) continue;
@@ -158,10 +162,12 @@ async function loadViajes(
     } else {
       map.set(t.viaje_id, {
         id: t.viaje_id,
+        numero: viajeRaw.numero,
         termografo_ids: [t.id],
         alerta_activa: !!viajeRaw.alerta_activa,
         temp_min: viajeRaw.temp_min,
         temp_max: viajeRaw.temp_max,
+        temp_actual: viajeRaw.temp_actual,
         ordenes_venta: viajeRaw.ordenes_venta ?? [],
       });
     }
@@ -260,22 +266,33 @@ async function runRealSync(
   let newCursor = cursor;
   let hasMore = true;
 
-  while (hasMore) {
-    const result = await getSensorReadings(newCursor);
-    rawPages.push(result.raw);
+  try {
+    while (hasMore) {
+      const result = await getSensorReadings(newCursor);
+      rawPages.push(result.raw);
 
-    for (const r of result.readings) {
-      const viaje = trackerMap.get(r.device_id);
-      if (!viaje) continue;
-      const deviceMap = byViaje.get(viaje.id) ?? new Map<string, CopelandReading[]>();
-      const deviceReadings = deviceMap.get(r.device_id) ?? [];
-      deviceReadings.push(r);
-      deviceMap.set(r.device_id, deviceReadings);
-      byViaje.set(viaje.id, deviceMap);
+      for (const r of result.readings) {
+        const viaje = trackerMap.get(r.device_id);
+        if (!viaje) continue;
+        const deviceMap = byViaje.get(viaje.id) ?? new Map<string, CopelandReading[]>();
+        const deviceReadings = deviceMap.get(r.device_id) ?? [];
+        deviceReadings.push(r);
+        deviceMap.set(r.device_id, deviceReadings);
+        byViaje.set(viaje.id, deviceMap);
+      }
+
+      if (result.maxGuid) newCursor = result.maxGuid;
+      hasMore = result.hasMore && result.readings.length > 0;
     }
-
-    if (result.maxGuid) newCursor = result.maxGuid;
-    hasMore = result.hasMore && result.readings.length > 0;
+  } catch (err) {
+    // Copeland caído: no matamos el cron (evitamos el 500). Descartamos cualquier
+    // lectura parcial y seguimos como si no hubiera lecturas nuevas, para que el
+    // 2º loop de evaluación de alertas igual se ejecute. Reseteamos el cursor a su
+    // valor previo: no avanzarlo en un fetch fallido evita perder lecturas que no
+    // llegamos a procesar (se reintentan en la próxima corrida).
+    console.warn("Copeland getSensorReadings falló, continuando sin lecturas nuevas:", err);
+    byViaje.clear();
+    newCursor = cursor;
   }
 
   let updated = 0;
@@ -293,6 +310,15 @@ async function runRealSync(
     const res = await checkAlertas(supabase, vid, productTempMin, productTempMax);
     alertResults.push(res);
     updated++;
+  }
+
+  // Evaluar alertas para viajes sin lecturas nuevas en esta corrida
+  for (const viaje of viajes) {
+    if (byViaje.has(viaje.id)) continue; // ya se procesó arriba
+    const { productTempMin, productTempMax } = getTempRange(viaje);
+    if (productTempMin == null || productTempMax == null) continue; // sin rango, skip
+    const res = await checkAlertas(supabase, viaje.id, productTempMin, productTempMax);
+    alertResults.push(res);
   }
 
   if (!filterViajeId && newCursor && newCursor !== cursor) {
