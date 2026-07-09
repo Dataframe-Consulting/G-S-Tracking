@@ -285,14 +285,15 @@ async function runRealSync(
       hasMore = result.hasMore && result.readings.length > 0;
     }
   } catch (err) {
-    // Copeland caído: no matamos el cron (evitamos el 500). Descartamos cualquier
-    // lectura parcial y seguimos como si no hubiera lecturas nuevas, para que el
-    // 2º loop de evaluación de alertas igual se ejecute. Reseteamos el cursor a su
-    // valor previo: no avanzarlo en un fetch fallido evita perder lecturas que no
-    // llegamos a procesar (se reintentan en la próxima corrida).
-    console.warn("Copeland getSensorReadings falló, continuando sin lecturas nuevas:", err);
-    byViaje.clear();
-    newCursor = cursor;
+    // Copeland cayó / rate-limit a mitad de la paginación (típico: la 2ª página de la
+    // ráfaga se corta con un error no-fatal no contemplado). NO descartamos el progreso:
+    // conservamos las lecturas ya recolectadas de las páginas exitosas y el `newCursor`
+    // avanzado hasta la última de ellas, para que ESTA corrida persista ese avance y la
+    // siguiente continúe desde ahí. Descartar y resetear el cursor (comportamiento
+    // anterior) dejaba el sync clavado releyendo la misma primera página para siempre,
+    // sin alcanzar nunca las lecturas nuevas. El dedup en persistMultipleReadings hace
+    // seguro guardar páginas parciales. Simplemente cortamos el loop con lo que llevamos.
+    console.warn("Copeland getSensorReadings falló, se conserva el progreso parcial:", err);
   }
 
   let updated = 0;
