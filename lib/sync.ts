@@ -126,10 +126,15 @@ async function loadViajes(
   supabase: SupabaseClient,
   viajeId?: string | null
 ): Promise<ViajeRow[]> {
+  // Solo termógrafos asignados Y no deshabilitados. Un termógrafo deshabilitado
+  // (Cambio 1) conserva su vínculo con el viaje (asignado + viaje_id intactos y su
+  // historial de lecturas) pero deja de pedir lecturas nuevas y de contar en
+  // promedio/alertas. La columna es NOT NULL default false, así que .eq es seguro.
   let q = supabase
     .from("termografos")
     .select(`id, viaje_id, viajes!inner(id, numero, alerta_activa, temp_min, temp_max, temp_actual, ordenes_venta(status))`)
-    .eq("asignado", true);
+    .eq("asignado", true)
+    .eq("deshabilitado", false);
 
   if (viajeId) q = q.eq("viaje_id", viajeId);
 

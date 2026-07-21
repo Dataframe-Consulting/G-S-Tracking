@@ -160,6 +160,9 @@ export interface Termografo {
   asignado: boolean;
   viaje_id: string | null;
   ultima_actividad: string | null;
+  /** Cambio 1: termógrafo deshabilitado (deja de leer/promediar/alertar) pero
+   *  conserva su vínculo con el viaje y su historial. No se puede reactivar. */
+  deshabilitado: boolean;
 }
 
 export type Role = "master" | "operador" | "visor";

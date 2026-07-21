@@ -1246,6 +1246,329 @@ function DatosViajeModal({
   );
 }
 
+// Cambio 2 — Modal de rechazo de cargas (3 pasos):
+//   Paso 1: elegir qué cargas rechazar (la que disparó el flujo viene marcada).
+//   Paso 2: (opcional) datos del viaje nuevo para re-rutearlas.
+//   Paso 3: (opcional) qué termógrafos transferir al viaje nuevo.
+// "Solo rechazar" termina en el Paso 1. Idempotencia: el id del viaje nuevo se
+// genera aquí (crypto.randomUUID) una sola vez por apertura del flujo.
+const REJECTABLE_STATUSES: Status[] = ["PENDIENTE", "EN_PREPARACION", "TRANSITO"];
+
+function RechazoModal({
+  viaje,
+  ordenes,
+  termografosActivos,
+  initialOvId,
+  onClose,
+  onDone,
+}: {
+  viaje: Viaje;
+  ordenes: OrdenVenta[];
+  termografosActivos: Termografo[];
+  initialOvId: string;
+  onClose: () => void;
+  onDone: (result: {
+    rechazadas: string[];
+    nuevo_viaje: { id: string; numero: number } | null;
+  }) => void;
+}) {
+  const rechazables = useMemo(
+    () => ordenes.filter((o) => REJECTABLE_STATUSES.includes(o.status)),
+    [ordenes]
+  );
+  const [paso, setPaso] = useState<1 | 2 | 3>(1);
+  // Preselecciona la carga que disparó el flujo solo si es rechazable.
+  const [selOv, setSelOv] = useState<Set<string>>(() =>
+    rechazables.some((o) => o.id === initialOvId) ? new Set([initialOvId]) : new Set()
+  );
+  const [selTermo, setSelTermo] = useState<Set<string>>(() => new Set());
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    lugar_inicio: viaje.lugar_inicio,
+    lugar_fin: viaje.lugar_fin,
+    fecha_inicio: viaje.fecha_inicio,
+    fecha_fin: viaje.fecha_fin,
+  });
+
+  function toggle(set: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
+    set((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  // Advertencia: si te llevas TODOS los termógrafos activos y el viaje origen aún
+  // quedará con cargas activas (ni rechazadas ahora ni entregadas), esas cargas
+  // se quedan sin monitoreo. Se advierte pero se permite continuar.
+  const cargasQuedanActivas = ordenes.some(
+    (o) => !selOv.has(o.id) && o.status !== "ENTREGADO" && o.status !== "RECHAZO_CALIDAD"
+  );
+  const seLlevaTodos =
+    termografosActivos.length > 0 && selTermo.size === termografosActivos.length;
+  const warnSinTermografo = cargasQuedanActivas && seLlevaTodos;
+
+  async function submit(crearViaje: boolean) {
+    if (selOv.size === 0) {
+      toast.error("Selecciona al menos una carga");
+      return;
+    }
+    if (crearViaje && (!form.lugar_inicio || !form.lugar_fin || !form.fecha_inicio || !form.fecha_fin)) {
+      toast.error("Completa origen, destino y fechas del viaje nuevo");
+      return;
+    }
+    setSubmitting(true);
+    const body = crearViaje
+      ? {
+          ov_ids: Array.from(selOv),
+          crear_viaje: true,
+          nuevo_viaje_id: crypto.randomUUID(),
+          viaje: {
+            lugar_inicio: form.lugar_inicio,
+            lugar_fin: form.lugar_fin,
+            fecha_inicio: form.fecha_inicio,
+            fecha_fin: form.fecha_fin,
+            flete_cargo: viaje.flete_cargo,
+            responsable_id: viaje.responsable_id,
+            linea_transportista_id: viaje.linea_transportista_id,
+            temp_min: viaje.temp_min,
+            temp_max: viaje.temp_max,
+            temp_rango_id: viaje.temp_rango_id ?? null,
+          },
+          termografo_ids: Array.from(selTermo),
+        }
+      : { ov_ids: Array.from(selOv), crear_viaje: false };
+
+    const res = await fetch(`/api/viajes/${viaje.id}/rechazo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    setSubmitting(false);
+    if (!res.ok) {
+      toast.error(json.error || "Error al rechazar");
+      return;
+    }
+    onDone({ rechazadas: json.rechazadas ?? [], nuevo_viaje: json.nuevo_viaje ?? null });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={() => !submitting && onClose()}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-lg max-h-[92vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 pt-5 pb-4 border-b border-brand-50">
+          <div className="font-display font-bold text-red-600">Rechazar cargas</div>
+          <div className="text-xs text-brand-400 mt-1">
+            Viaje #{String(viaje.numero).padStart(4, "0")} · Paso {paso} de {paso === 1 ? "1 o 3" : 3}
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-3">
+          {/* Paso 1 — seleccionar cargas */}
+          {paso === 1 && (
+            <>
+              <p className="text-sm text-brand-500">
+                Selecciona las cargas a rechazar. Se conservará todo su historial; ya no
+                mostrarán nuevas mediciones ni alertas.
+              </p>
+              {rechazables.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-brand-200 p-6 text-center text-sm text-brand-400">
+                  No hay cargas rechazables (todas están entregadas o ya rechazadas).
+                </div>
+              ) : (
+                rechazables.map((o) => (
+                  <label
+                    key={o.id}
+                    className="flex items-center gap-3 rounded-xl border border-brand-200 px-4 py-3 cursor-pointer hover:bg-brand-50 transition"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selOv.has(o.id)}
+                      onChange={() => toggle(setSelOv, o.id)}
+                      className="h-4 w-4 rounded border-brand-300 text-red-600 focus:ring-red-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">
+                          {o.ov_ref || "—"}
+                        </span>
+                        <StatusBadge status={o.status} />
+                      </div>
+                      <div className="text-sm font-medium text-brand-900 mt-0.5 truncate">
+                        {o.cliente}
+                      </div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </>
+          )}
+
+          {/* Paso 2 — datos del viaje nuevo */}
+          {paso === 2 && (
+            <>
+              <p className="text-sm text-brand-500">
+                Se creará un <span className="font-semibold text-brand-700">viaje nuevo</span> con
+                las cargas seleccionadas (copiadas, en estado Pendiente). Ajusta la ruta y fechas;
+                podrás editar cliente/destino/referencia de cada carga dentro del viaje nuevo.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs font-medium text-brand-700 mb-1">Origen</div>
+                  <CiudadCombobox
+                    value={form.lugar_inicio}
+                    onChange={(v) => setForm((f) => ({ ...f, lugar_inicio: v }))}
+                    placeholder="Lugar de inicio"
+                    inputClassName={fieldCls}
+                  />
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-brand-700 mb-1">Destino</div>
+                  <CiudadCombobox
+                    value={form.lugar_fin}
+                    onChange={(v) => setForm((f) => ({ ...f, lugar_fin: v }))}
+                    placeholder="Lugar de fin"
+                    inputClassName={fieldCls}
+                  />
+                </div>
+                <label className="block text-xs font-medium text-brand-700">
+                  Fecha inicio
+                  <DatePicker
+                    value={form.fecha_inicio}
+                    onChange={(v) => setForm((f) => ({ ...f, fecha_inicio: v }))}
+                    className={`${fieldCls} mt-1`}
+                  />
+                </label>
+                <label className="block text-xs font-medium text-brand-700">
+                  Fecha fin
+                  <DatePicker
+                    value={form.fecha_fin}
+                    onChange={(v) => setForm((f) => ({ ...f, fecha_fin: v }))}
+                    className={`${fieldCls} mt-1`}
+                  />
+                </label>
+              </div>
+              <div className="text-[11px] text-brand-400">
+                El rango de temperatura y el flete se copian del viaje original (editables luego).
+              </div>
+            </>
+          )}
+
+          {/* Paso 3 — termógrafos a transferir */}
+          {paso === 3 && (
+            <>
+              <p className="text-sm text-brand-500">
+                Elige qué termógrafos pasan al viaje nuevo. Sus lecturas nuevas irán al viaje
+                nuevo; el historial anterior se queda en el viaje original.
+              </p>
+              {termografosActivos.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-brand-200 p-6 text-center text-sm text-brand-400">
+                  No hay termógrafos disponibles para transferir. Puedes crear el viaje y asignar
+                  uno después.
+                </div>
+              ) : (
+                termografosActivos.map((t) => (
+                  <label
+                    key={t.id}
+                    className="flex items-center gap-3 rounded-xl border border-brand-200 px-4 py-3 cursor-pointer hover:bg-brand-50 transition"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selTermo.has(t.id)}
+                      onChange={() => toggle(setSelTermo, t.id)}
+                      className="h-4 w-4 rounded border-brand-300 text-brand-700 focus:ring-brand-500"
+                    />
+                    <span className="text-sm font-mono font-medium text-brand-900">{t.id}</span>
+                  </label>
+                ))
+              )}
+              {warnSinTermografo && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                  Vas a mover todos los termógrafos activos, pero el viaje original todavía tiene
+                  cargas activas. Esas cargas quedarán <span className="font-semibold">sin
+                  monitoreo</span>. Puedes continuar si estás seguro.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer por paso */}
+        <div className="flex items-center gap-3 px-6 pb-5 pt-2 border-t border-brand-50">
+          {paso === 1 && (
+            <>
+              <button
+                onClick={() => submit(false)}
+                disabled={submitting || selOv.size === 0 || rechazables.length === 0}
+                className="rounded-xl bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50 transition shadow-sm"
+              >
+                {submitting ? "Rechazando…" : "Solo rechazar"}
+              </button>
+              <button
+                onClick={() => setPaso(2)}
+                disabled={submitting || selOv.size === 0 || rechazables.length === 0}
+                className="rounded-xl bg-brand-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 transition shadow-sm"
+              >
+                Rechazar y crear viaje →
+              </button>
+              <button
+                onClick={onClose}
+                disabled={submitting}
+                className="ml-auto rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
+              >
+                Cancelar
+              </button>
+            </>
+          )}
+          {paso === 2 && (
+            <>
+              <button
+                onClick={() => setPaso(1)}
+                disabled={submitting}
+                className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
+              >
+                ← Atrás
+              </button>
+              <button
+                onClick={() => setPaso(3)}
+                disabled={submitting}
+                className="rounded-xl bg-brand-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 transition shadow-sm"
+              >
+                Siguiente →
+              </button>
+            </>
+          )}
+          {paso === 3 && (
+            <>
+              <button
+                onClick={() => setPaso(2)}
+                disabled={submitting}
+                className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 transition"
+              >
+                ← Atrás
+              </button>
+              <button
+                onClick={() => submit(true)}
+                disabled={submitting}
+                className="rounded-xl bg-brand-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60 transition shadow-sm"
+              >
+                {submitting ? "Creando…" : "Crear viaje y rechazar"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ViajeEditData = {
   lugar_inicio: string;
   lugar_fin: string;
@@ -1291,6 +1614,15 @@ export function ViajeDetail({
 
   // Termógrafo modal
   const [showTermografoModal, setShowTermografoModal] = useState(false);
+
+  // Modal deshabilitar termógrafo (Cambio 1): se ofrece al completar (ENTREGADO)
+  // una carga en un viaje con 2+ termógrafos activos. Deshabilitar es opcional.
+  const [showDisableModal, setShowDisableModal] = useState(false);
+  const [disableSel, setDisableSel] = useState<Set<string>>(new Set());
+  const [disabling, setDisabling] = useState(false);
+
+  // Modal de rechazo (Cambio 2): la OV sobre la que se eligió "Rechazo".
+  const [rechazoOv, setRechazoOv] = useState<OrdenVenta | null>(null);
 
   // Rango de temperatura del viaje (manual o de catálogo). Si se define, manda
   // sobre los productos de las OVs (Fase 1).
@@ -1435,9 +1767,16 @@ export function ViajeDetail({
     return map;
   }, [lecturas]);
 
+  // Termógrafos activos (no deshabilitados): los únicos que cuentan para el
+  // promedio y las alertas. Los deshabilitados siguen listados pero congelados.
+  const termografosActivos = useMemo(
+    () => termografos.filter((t) => !t.deshabilitado),
+    [termografos]
+  );
+
   const tempDeCarga = useMemo(() => {
-    if (termografos.length === 0) return null;
-    const latest = termografos
+    if (termografosActivos.length === 0) return null;
+    const latest = termografosActivos
       .map((t) => {
         const tLecturas = lecturasByTermografo.get(t.id) ?? [];
         return tLecturas[0]?.temperatura != null ? Number(tLecturas[0].temperatura) : null;
@@ -1445,7 +1784,7 @@ export function ViajeDetail({
       .filter((v): v is number => v !== null);
     if (latest.length === 0) return null;
     return latest.reduce((a, b) => a + b, 0) / latest.length;
-  }, [termografos, lecturasByTermografo]);
+  }, [termografosActivos, lecturasByTermografo]);
 
   // Estado de la temperatura de carga respecto al rango del producto.
   // Mismo criterio de color que la tabla y el gauge (helper único tempEstado):
@@ -1574,13 +1913,35 @@ export function ViajeDetail({
   }
 
   async function updateOVStatus(ov: OrdenVenta, next: Status) {
+    // Cambio 2: elegir "Rechazo" abre el modal de rechazo en vez de aplicar el
+    // cambio. El status solo cambia al confirmar; si se cancela, el dropdown
+    // (controlado por ov.status) vuelve solo a su valor.
+    if (next === "RECHAZO_CALIDAD") {
+      if (ov.status === "ENTREGADO") {
+        toast.error("Una carga entregada no se puede rechazar");
+        return;
+      }
+      setRechazoOv(ov);
+      return;
+    }
     const res = await fetch(`/api/viajes/${viaje.id}/ordenes/${ov.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: next }),
     });
     if (res.ok) {
-      setOrdenes((prev) => prev.map((o) => (o.id === ov.id ? { ...o, status: next } : o)));
+      const nuevasOrdenes = ordenes.map((o) => (o.id === ov.id ? { ...o, status: next } : o));
+      setOrdenes(nuevasOrdenes);
+      // Cambio 1: al completar (ENTREGADO) una carga en un viaje que aún NO queda
+      // concluido y con 2+ termógrafos activos, ofrecer deshabilitar uno o varios.
+      if (
+        next === "ENTREGADO" &&
+        !viajeConcluido(nuevasOrdenes) &&
+        termografosActivos.length >= 2
+      ) {
+        setDisableSel(new Set());
+        setShowDisableModal(true);
+      }
       // Aplicar de inmediato el congelado/reactivación del monitoreo sin esperar al
       // polling de 3 min: corre un sync y refresca. La suscripción realtime refleja
       // el cambio de alerta_activa al instante.
@@ -1590,6 +1951,41 @@ export function ViajeDetail({
     } else {
       toast.error("Error al actualizar status");
     }
+  }
+
+  // Confirmar deshabilitación de los termógrafos seleccionados en el modal.
+  async function confirmDisable() {
+    const ids = Array.from(disableSel);
+    if (ids.length === 0) {
+      setShowDisableModal(false);
+      return;
+    }
+    setDisabling(true);
+    const results = await Promise.all(
+      ids.map((tid) =>
+        fetch(`/api/viajes/${viaje.id}/termografos/${encodeURIComponent(tid)}`, {
+          method: "PATCH",
+        })
+          .then((r) => r.ok)
+          .catch(() => false)
+      )
+    );
+    setDisabling(false);
+    const okIds = ids.filter((_, i) => results[i]);
+    if (okIds.length > 0) {
+      setTermografos((prev) =>
+        prev.map((t) => (okIds.includes(t.id) ? { ...t, deshabilitado: true } : t))
+      );
+      setActiveTermografoIdx(0);
+      toast.success(
+        okIds.length === 1
+          ? "Termógrafo deshabilitado"
+          : `${okIds.length} termógrafos deshabilitados`
+      );
+    }
+    if (okIds.length < ids.length) toast.error("Algún termógrafo no se pudo deshabilitar");
+    setShowDisableModal(false);
+    router.refresh();
   }
 
   async function sincronizarViaje() {
@@ -1956,6 +2352,116 @@ export function ViajeDetail({
             />
           </div>
         </div>
+      )}
+
+      {/* Modal deshabilitar termógrafo (Cambio 1) */}
+      {showDisableModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => !disabling && setShowDisableModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-brand-100 w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-4 border-b border-brand-50">
+              <div className="font-display font-bold text-brand-900">Deshabilitar termógrafo</div>
+              <p className="text-sm text-brand-500 mt-1">
+                Carga completada. Este viaje tiene varios termógrafos activos: puedes
+                deshabilitar los que ya no viajan con la carga. Es opcional.
+              </p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className="text-xs font-medium text-brand-700">Termógrafos activos</div>
+              {termografosActivos.map((t) => {
+                const checked = disableSel.has(t.id);
+                return (
+                  <label
+                    key={t.id}
+                    className="flex items-center gap-3 rounded-xl border border-brand-200 px-4 py-3 cursor-pointer hover:bg-brand-50 transition"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) =>
+                        setDisableSel((prev) => {
+                          const n = new Set(prev);
+                          if (e.target.checked) n.add(t.id);
+                          else n.delete(t.id);
+                          return n;
+                        })
+                      }
+                      className="h-4 w-4 rounded border-brand-300 text-brand-700 focus:ring-brand-500"
+                    />
+                    <span className="text-sm font-mono font-medium text-brand-900">{t.id}</span>
+                  </label>
+                );
+              })}
+              {disableSel.size > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 space-y-1">
+                  <div className="font-semibold">
+                    Al deshabilitar {disableSel.size === 1 ? "este termógrafo" : "estos termógrafos"}:
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    <li>Dejará de usarse para lecturas nuevas y alertas.</li>
+                    <li>La temperatura del viaje se calculará solo con los termógrafos restantes.</li>
+                    <li>Si queda un solo termógrafo activo, se mostrará su lectura directa (sin promedio).</li>
+                    <li>Su historial se conserva. La acción no se puede revertir desde AgroTrack.</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 px-6 pb-5 pt-2 border-t border-brand-50">
+              <button
+                onClick={confirmDisable}
+                disabled={disabling}
+                className="rounded-xl bg-brand-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60 transition shadow-sm"
+              >
+                {disabling
+                  ? "Guardando…"
+                  : disableSel.size === 0
+                    ? "No deshabilitar"
+                    : "Deshabilitar"}
+              </button>
+              <button
+                onClick={() => setShowDisableModal(false)}
+                disabled={disabling}
+                className="rounded-xl border border-brand-200 px-5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50 transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de rechazo (Cambio 2) */}
+      {rechazoOv && (
+        <RechazoModal
+          viaje={viaje}
+          ordenes={ordenes}
+          termografosActivos={termografosActivos}
+          initialOvId={rechazoOv.id}
+          onClose={() => setRechazoOv(null)}
+          onDone={({ rechazadas, nuevo_viaje }) => {
+            setRechazoOv(null);
+            if (nuevo_viaje) {
+              toast.success(`Viaje #${String(nuevo_viaje.numero).padStart(4, "0")} creado`);
+              router.push(`/viajes/${nuevo_viaje.id}`);
+              router.refresh();
+            } else {
+              setOrdenes((prev) =>
+                prev.map((o) =>
+                  rechazadas.includes(o.id) ? { ...o, status: "RECHAZO_CALIDAD" as Status } : o
+                )
+              );
+              toast.success(
+                rechazadas.length === 1 ? "Carga rechazada" : `${rechazadas.length} cargas rechazadas`
+              );
+              router.refresh();
+            }
+          }}
+        />
       )}
 
       {/* Modal detalle OV */}
@@ -2360,7 +2866,14 @@ export function ViajeDetail({
             <div className="space-y-1.5">
               {termografos.map((t) => (
                 <div key={t.id} className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium font-mono text-brand-900">{t.id}</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium font-mono text-brand-900">{t.id}</span>
+                    {t.deshabilitado && (
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-brand-500 bg-brand-100 rounded-full px-2 py-0.5 shrink-0">
+                        Deshabilitado
+                      </span>
+                    )}
+                  </span>
                   <button
                     onClick={async () => {
                       const res = await fetch(
@@ -2417,14 +2930,14 @@ export function ViajeDetail({
               >
                 {tempDeCarga != null ? `${(cToF(tempDeCarga) as number).toFixed(1)}°F` : "—"}
               </div>
-              {termografos.length > 1 && (
+              {termografosActivos.length > 1 && (
                 <div className="text-[11px] text-brand-400 mt-1">
-                  Promedio de {termografos.length} termógrafos
+                  Promedio de {termografosActivos.length} termógrafos
                 </div>
               )}
               {monitoreoFinalizado && (
                 <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-brand-600">
-                  Monitoreo finalizado · entregado
+                  Monitoreo finalizado
                 </div>
               )}
               {tempCargaFuera && (
@@ -2543,6 +3056,11 @@ export function ViajeDetail({
                             : null;
                         return (
                           <div key={t.id} className="min-w-full space-y-3">
+                            {t.deshabilitado && (
+                              <div className="text-center text-[11px] font-medium uppercase tracking-wide text-brand-500">
+                                Termógrafo deshabilitado · historial
+                              </div>
+                            )}
                             <TempGauge value={latestTemp} min={tempMin} max={tempMax} />
                             <TempChart
                               lecturas={tLecturas}
@@ -2659,7 +3177,7 @@ export function ViajeDetail({
               <div className="p-6 text-sm text-brand-400 text-center">Sin alertas.</div>
             ) : (
               <ul className="divide-y divide-brand-50">
-                {alertas.map((a) => (
+                {alertas.slice(0, 6).map((a) => (
                   <li
                     key={a.id}
                     className="px-5 py-3 text-sm flex items-center justify-between gap-3"

@@ -27,7 +27,7 @@ export default async function ViajesPage() {
   const { data: termosData } = viajeIds.length
     ? await supabase
         .from("termografos")
-        .select("id, nombre, asignado, viaje_id, ultima_actividad")
+        .select("id, nombre, asignado, viaje_id, ultima_actividad, deshabilitado")
         .eq("asignado", true)
         .in("viaje_id", viajeIds)
     : { data: [] as Termografo[] };
@@ -41,9 +41,13 @@ export default async function ViajesPage() {
   }
 
   // Temperatura de carga = promedio de la última lectura de cada termógrafo asignado
-  // (igual que el indicador del detalle). Solo visualización; no toca temp_actual ni alertas.
+  // y NO deshabilitado (igual que el indicador del detalle). Solo visualización; no
+  // toca temp_actual ni alertas. Los deshabilitados (Cambio 1) se siguen listando en
+  // termosByViaje pero no cuentan para el promedio.
   const latestPorTermo = await Promise.all(
-    ((termosData ?? []) as Termografo[]).map(async (t) => {
+    ((termosData ?? []) as Termografo[])
+      .filter((t) => !t.deshabilitado)
+      .map(async (t) => {
       const { data } = await supabase
         .from("lecturas_temperatura")
         .select("temperatura")
