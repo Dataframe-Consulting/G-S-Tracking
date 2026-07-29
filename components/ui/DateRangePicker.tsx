@@ -15,6 +15,10 @@ interface Props {
   /** Muestra la X para vaciar el rango. En vistas con periodo obligatorio
    *  (ej. dashboard) conviene false, porque vaciar no es un estado válido. */
   clearable?: boolean;
+  /** Si true, un solo toque (solo "desde", sin "hasta") se interpreta y se
+   *  etiqueta como ese único día; para un rango se toca un 2º día distinto.
+   *  El consumidor debe tratar "hasta" vacío como = "desde". */
+  singleTapDay?: boolean;
 }
 
 /** Date → "AAAA-MM-DD" usando la fecha local (sin desfase de zona horaria) */
@@ -32,7 +36,13 @@ function fromStr(s: string): Date | undefined {
   return new Date(y, m - 1, d);
 }
 
-export function DateRangePicker({ desde, hasta, onChange, clearable = true }: Props) {
+export function DateRangePicker({
+  desde,
+  hasta,
+  onChange,
+  clearable = true,
+  singleTapDay = false,
+}: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +66,9 @@ export function DateRangePicker({ desde, hasta, onChange, clearable = true }: Pr
   const hasValue = Boolean(desde || hasta);
 
   let label = "Fecha";
-  if (desde && hasta) label = `${fmt(desde)} – ${fmt(hasta)}`;
+  if (desde && hasta && desde !== hasta) label = `${fmt(desde)} – ${fmt(hasta)}`;
+  else if (desde && hasta) label = fmt(desde); // mismo día en ambos extremos
+  else if (desde && singleTapDay) label = fmt(desde); // un solo toque = ese día
   else if (desde) label = `Desde ${fmt(desde)}`;
   else if (hasta) label = `Hasta ${fmt(hasta)}`;
 

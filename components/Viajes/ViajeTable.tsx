@@ -21,6 +21,15 @@ function fleteDe(v: Viaje): string | null {
   return v.linea?.concesionario?.nombre ?? v.flete_cargo ?? null;
 }
 
+// Cita (fecha_entrega) más próxima entre las OVs visibles de un viaje, o null si
+// ninguna tiene cita. Sirve para ordenar Activos por lo que se entrega primero.
+function minCita(ovs: OrdenVenta[]): string | null {
+  const fechas = ovs
+    .map((o) => o.fecha_entrega)
+    .filter((f): f is string => Boolean(f));
+  return fechas.length ? fechas.reduce((a, b) => (a < b ? a : b)) : null;
+}
+
 function FilterSelect({
   label,
   value,
@@ -422,10 +431,21 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       const ovs = ovsForTab(v, tab);
       if (ovs) out.push({ viaje: v, ovs });
     }
-    // Completados/Rechazados: ordenar por cuándo concluyó el viaje (lo más reciente
-    // arriba). Los que no tienen fecha de conclusión (datos viejos) caen al final,
-    // conservando su orden de creación (numero desc, como llegan de la página).
-    if (tab === "completados" || tab === "rechazados") {
+    if (tab === "activos") {
+      // G&S: lo que se entrega primero va hasta arriba (cita ascendente). Los
+      // viajes sin cita caen al final; entre ellos, el más nuevo primero.
+      out.sort((a, b) => {
+        const ca = minCita(a.ovs);
+        const cb = minCita(b.ovs);
+        if (ca && cb) return ca.localeCompare(cb);
+        if (ca) return -1;
+        if (cb) return 1;
+        return b.viaje.numero - a.viaje.numero;
+      });
+    } else if (tab === "completados" || tab === "rechazados") {
+      // Ordenar por cuándo concluyó el viaje (lo más reciente arriba). Los que no
+      // tienen fecha de conclusión (datos viejos) caen al final, conservando su
+      // orden de creación (numero desc, como llegan de la página).
       out.sort((a, b) => {
         const ta = a.viaje.concluido_at ? new Date(a.viaje.concluido_at).getTime() : 0;
         const tb = b.viaje.concluido_at ? new Date(b.viaje.concluido_at).getTime() : 0;
@@ -482,8 +502,20 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
     const ovLower = fOvRef.toLowerCase();
     return tabItems.filter(({ viaje: v, ovs }) => {
       if (fFlete && fleteDe(v) !== fFlete) return false;
-      if (fDesde && (!v.fecha_inicio || v.fecha_inicio < fDesde)) return false;
-      if (fHasta && (!v.fecha_inicio || v.fecha_inicio > fHasta)) return false;
+      // Filtro por fecha de entrega (cita) de las cargas visibles. Con singleTapDay,
+      // si solo se eligió "desde" se filtra ese único día (hastaEff = fDesde). Un
+      // viaje pasa si alguna de sus cargas visibles tiene cita dentro del rango.
+      if (fDesde || fHasta) {
+        const hastaEff = fHasta || fDesde;
+        const match = ovs.some((o) => {
+          const fe = o.fecha_entrega;
+          if (!fe) return false;
+          if (fDesde && fe < fDesde) return false;
+          if (hastaEff && fe > hastaEff) return false;
+          return true;
+        });
+        if (!match) return false;
+      }
       if (fOrigen && v.lugar_inicio !== fOrigen) return false;
       if (
         fTermografo &&
@@ -624,6 +656,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
             options={responsablesOpts}
           />
           <DateRangePicker
+            singleTapDay
             desde={fDesde}
             hasta={fHasta}
             onChange={(d, h) => {
