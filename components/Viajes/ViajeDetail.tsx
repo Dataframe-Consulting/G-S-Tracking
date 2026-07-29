@@ -1254,9 +1254,14 @@ function DatosViajeModal({
 // genera aquí (crypto.randomUUID) una sola vez por apertura del flujo.
 const REJECTABLE_STATUSES: Status[] = ["PENDIENTE", "EN_PREPARACION", "TRANSITO"];
 
+// Override por carga para la copia en el viaje nuevo (Cambio 2): OV/REF nueva,
+// cliente y CEDIS (destino). Los demás campos se heredan de la carga original.
+type OvOverride = { ov_ref: string; cliente: string; cedi: string };
+
 function RechazoModal({
   viaje,
   ordenes,
+  clientes,
   termografosActivos,
   initialOvId,
   onClose,
@@ -1264,6 +1269,7 @@ function RechazoModal({
 }: {
   viaje: Viaje;
   ordenes: OrdenVenta[];
+  clientes: ClienteConCedis[];
   termografosActivos: Termografo[];
   initialOvId: string;
   onClose: () => void;
@@ -1289,6 +1295,23 @@ function RechazoModal({
     fecha_inicio: viaje.fecha_inicio,
     fecha_fin: viaje.fecha_fin,
   });
+  // Overrides por carga (keyed por origen_ov_id). Se completan bajo demanda.
+  const [ovOverrides, setOvOverrides] = useState<Record<string, OvOverride>>({});
+
+  // Default de una carga: OV/REF vacía (se captura nueva), cliente/CEDIS heredados.
+  function defaultOverride(id: string): OvOverride {
+    const orig = ordenes.find((o) => o.id === id);
+    return { ov_ref: "", cliente: orig?.cliente ?? "", cedi: orig?.cedi ?? "" };
+  }
+  function getOverride(id: string): OvOverride {
+    return ovOverrides[id] ?? defaultOverride(id);
+  }
+  function setOverride(id: string, patch: Partial<OvOverride>) {
+    setOvOverrides((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? defaultOverride(id)), ...patch },
+    }));
+  }
 
   function toggle(set: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
     set((prev) => {
@@ -1314,9 +1337,25 @@ function RechazoModal({
       toast.error("Selecciona al menos una carga");
       return;
     }
-    if (crearViaje && (!form.lugar_inicio || !form.lugar_fin || !form.fecha_inicio || !form.fecha_fin)) {
-      toast.error("Completa origen, destino y fechas del viaje nuevo");
-      return;
+    if (crearViaje) {
+      if (!form.lugar_inicio || !form.lugar_fin || !form.fecha_inicio || !form.fecha_fin) {
+        toast.error("Completa origen, destino y fechas del viaje nuevo");
+        return;
+      }
+      // Validar datos por carga: cliente obligatorio; CEDIS obligatorio si el
+      // cliente tiene CEDIS (mismo criterio que el formulario de carga).
+      for (const id of selOv) {
+        const ovr = getOverride(id);
+        if (!ovr.cliente) {
+          toast.error("Cada carga necesita un cliente");
+          return;
+        }
+        const cedisDelCliente = clientes.find((c) => c.nombre === ovr.cliente)?.cedis ?? [];
+        if (cedisDelCliente.length > 0 && !ovr.cedi) {
+          toast.error("Selecciona el CEDIS (destino) de cada carga");
+          return;
+        }
+      }
     }
     setSubmitting(true);
     const body = crearViaje
@@ -1337,6 +1376,16 @@ function RechazoModal({
             temp_rango_id: viaje.temp_rango_id ?? null,
           },
           termografo_ids: Array.from(selTermo),
+          // Datos capturados por carga para la copia (OV/REF nueva, cliente, CEDIS).
+          ovs: Array.from(selOv).map((id) => {
+            const ovr = getOverride(id);
+            return {
+              origen_ov_id: id,
+              ov_ref: ovr.ov_ref.trim() || null,
+              cliente: ovr.cliente || undefined,
+              cedi: ovr.cedi || null,
+            };
+          }),
         }
       : { ov_ids: Array.from(selOv), crear_viaje: false };
 
@@ -1416,8 +1465,8 @@ function RechazoModal({
             <>
               <p className="text-sm text-brand-500">
                 Se creará un <span className="font-semibold text-brand-700">viaje nuevo</span> con
-                las cargas seleccionadas (copiadas, en estado Pendiente). Ajusta la ruta y fechas;
-                podrás editar cliente/destino/referencia de cada carga dentro del viaje nuevo.
+                las cargas seleccionadas (copiadas, en estado Pendiente). Ajusta la ruta y fechas
+                del viaje, y captura la nueva OV, cliente y destino de cada carga abajo.
               </p>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
@@ -1457,6 +1506,68 @@ function RechazoModal({
               </div>
               <div className="text-[11px] text-brand-400">
                 El rango de temperatura y el flete se copian del viaje original (editables luego).
+              </div>
+
+              {/* Editor por carga: OV/REF nueva, cliente y CEDIS (destino) */}
+              <div className="pt-2 space-y-3">
+                <div className="text-xs font-semibold text-brand-700">Cargas del viaje nuevo</div>
+                {Array.from(selOv).map((id) => {
+                  const orig = ordenes.find((o) => o.id === id);
+                  const ovr = getOverride(id);
+                  const cedisDelCliente =
+                    clientes.find((c) => c.nombre === ovr.cliente)?.cedis ?? [];
+                  return (
+                    <div key={id} className="rounded-xl border border-brand-200 bg-brand-50/40 p-3 space-y-2">
+                      <div className="text-[11px] text-brand-400">
+                        Original: {orig?.ov_ref || "sin ref"} · {orig?.cliente}
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-2">
+                        <label className="block text-xs font-medium text-brand-700">
+                          Nueva OV / REF
+                          <input
+                            type="text"
+                            value={ovr.ov_ref}
+                            onChange={(e) => setOverride(id, { ov_ref: e.target.value })}
+                            placeholder="Opcional"
+                            className={`${fieldCls} font-mono mt-1`}
+                          />
+                        </label>
+                        <label className="block text-xs font-medium text-brand-700">
+                          Cliente
+                          <select
+                            value={ovr.cliente}
+                            onChange={(e) => setOverride(id, { cliente: e.target.value, cedi: "" })}
+                            className={`${fieldCls} bg-white mt-1`}
+                          >
+                            <option value="">— Selecciona cliente —</option>
+                            {clientes.map((c) => (
+                              <option key={c.id} value={c.nombre}>
+                                {c.nombre}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {cedisDelCliente.length > 0 && (
+                          <label className="block text-xs font-medium text-brand-700 sm:col-span-2">
+                            CEDIS (destino)
+                            <select
+                              value={ovr.cedi}
+                              onChange={(e) => setOverride(id, { cedi: e.target.value })}
+                              className={`${fieldCls} bg-white mt-1`}
+                            >
+                              <option value="">— Selecciona CEDIS —</option>
+                              {cedisDelCliente.map((d) => (
+                                <option key={d.id} value={d.nombre}>
+                                  {d.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
@@ -1921,6 +2032,8 @@ export function ViajeDetail({
         toast.error("Una carga entregada no se puede rechazar");
         return;
       }
+      // Cargar clientes/CEDIS (y demás catálogos) para el editor por carga del modal.
+      await loadFormData();
       setRechazoOv(ov);
       return;
     }
@@ -2440,6 +2553,7 @@ export function ViajeDetail({
         <RechazoModal
           viaje={viaje}
           ordenes={ordenes}
+          clientes={clientes}
           termografosActivos={termografosActivos}
           initialOvId={rechazoOv.id}
           onClose={() => setRechazoOv(null)}

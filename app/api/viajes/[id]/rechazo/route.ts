@@ -112,6 +112,30 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       if (!v[k]) return NextResponse.json({ error: `Falta viaje.${k}` }, { status: 400 });
     }
 
+    const ovsNuevas: OvNueva[] = Array.isArray(body.ovs) ? body.ovs : [];
+
+    // Validar que las OV/REF capturadas no choquen con otras existentes (ov_ref es
+    // UNIQUE). Se excluyen las del propio viaje nuevo para no romper la idempotencia
+    // en un retry (donde las copias ya existen con esas refs).
+    const refsCapturadas = [
+      ...new Set(
+        ovsNuevas.map((o) => (o.ov_ref ?? "").trim()).filter((r) => r.length > 0)
+      ),
+    ];
+    if (refsCapturadas.length > 0) {
+      const { data: dupes } = await supabase
+        .from("ordenes_venta")
+        .select("ov_ref")
+        .in("ov_ref", refsCapturadas)
+        .neq("viaje_id", nuevoViajeId);
+      if (dupes && dupes.length > 0) {
+        return NextResponse.json(
+          { error: `La OV/REF "${dupes[0].ov_ref}" ya existe. Usa una diferente.` },
+          { status: 409 }
+        );
+      }
+    }
+
     // Idempotencia: si el viaje nuevo ya existe (retry/doble-submit) no lo recreamos.
     const { data: existente } = await supabase
       .from("viajes")
@@ -161,7 +185,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       .limit(1);
 
     if (!yaCopiadas || yaCopiadas.length === 0) {
-      const ovsNuevas: OvNueva[] = Array.isArray(body.ovs) ? body.ovs : [];
       for (const rid of rechazablesIds) {
         const override = ovsNuevas.find((o) => o.origen_ov_id === rid);
         // Leer la original completa para heredar lo que el usuario no editó.
@@ -175,8 +198,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         const payload = {
           viaje_id: nuevoViaje.id,
           // ov_ref es UNIQUE: la original la conserva en Rechazados, así que la
-          // copia arranca sin ref (null) salvo que el usuario asigne una nueva.
-          ov_ref: override?.ov_ref ?? null,
+          // copia arranca sin ref (null) salvo que el usuario capture una nueva.
+          ov_ref: (override?.ov_ref ?? "").trim() || null,
           cliente: override?.cliente ?? orig.cliente,
           cedi: override?.cedi ?? orig.cedi ?? null,
           fecha_carga: override?.fecha_carga ?? orig.fecha_carga,
