@@ -1074,8 +1074,25 @@ function DatosViajeModal({
   onClose: () => void;
   onSaved: (v: Viaje) => void;
 }) {
+  // Flete = concesionario; la línea pertenece a un flete. Se deriva el flete actual
+  // desde la línea asignada, o desde el nombre guardado en flete_cargo (del alta).
+  const initialFleteId = (() => {
+    if (viaje.linea_transportista_id) {
+      const c = concesionarios.find((co) =>
+        (co.lineas_transportista ?? []).some((l) => l.id === viaje.linea_transportista_id)
+      );
+      if (c) return c.id;
+    }
+    if (viaje.flete_cargo) {
+      const c = concesionarios.find((co) => co.nombre === viaje.flete_cargo);
+      if (c) return c.id;
+    }
+    return "";
+  })();
+
+  const [fleteId, setFleteId] = useState(initialFleteId);
+  const [lineaId, setLineaId] = useState(viaje.linea_transportista_id ?? "");
   const [form, setForm] = useState({
-    linea_transportista_id: viaje.linea_transportista_id ?? "",
     operador: viaje.operador ?? "",
     modelo: viaje.modelo ?? "",
     anio: viaje.anio ?? "",
@@ -1085,6 +1102,9 @@ function DatosViajeModal({
   });
   const [saving, setSaving] = useState(false);
 
+  const lineasDelFlete =
+    concesionarios.find((c) => c.id === fleteId)?.lineas_transportista ?? [];
+
   function upd<K extends keyof typeof form>(k: K, val: string) {
     setForm((f) => ({ ...f, [k]: val }));
   }
@@ -1092,8 +1112,12 @@ function DatosViajeModal({
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    const fleteNombre = concesionarios.find((c) => c.id === fleteId)?.nombre ?? null;
     const body = {
-      linea_transportista_id: form.linea_transportista_id || null,
+      // El flete (concesionario) se persiste como texto en flete_cargo, para que
+      // se muestre aunque no se elija línea.
+      flete_cargo: fleteNombre,
+      linea_transportista_id: lineaId || null,
       operador: form.operador.trim() || null,
       modelo: form.modelo.trim() || null,
       anio: form.anio.trim() || null,
@@ -1112,12 +1136,12 @@ function DatosViajeModal({
       toast.error(json.error || "Error al guardar");
       return;
     }
-    const sel = concesionarios
-      .flatMap((c) => (c.lineas_transportista ?? []).map((l) => ({ l, c })))
-      .find((x) => x.l.id === form.linea_transportista_id);
-    const linea = sel
-      ? { id: sel.l.id, nombre: sel.l.nombre, concesionario: { id: sel.c.id, nombre: sel.c.nombre } }
-      : null;
+    const selLinea = lineasDelFlete.find((l) => l.id === lineaId);
+    const selConces = concesionarios.find((c) => c.id === fleteId);
+    const linea =
+      selLinea && selConces
+        ? { id: selLinea.id, nombre: selLinea.nombre, concesionario: { id: selConces.id, nombre: selConces.nombre } }
+        : null;
     onSaved({ ...viaje, ...body, linea } as Viaje);
     toast.success("Datos del viaje guardados");
     onClose();
@@ -1146,21 +1170,43 @@ function DatosViajeModal({
 
         <div className="px-6 py-5 space-y-4">
           <label className="block text-xs font-medium text-brand-700">
-            Línea transportista
+            Flete (transportista)
             <select
-              value={form.linea_transportista_id}
-              onChange={(e) => upd("linea_transportista_id", e.target.value)}
+              value={fleteId}
+              onChange={(e) => {
+                setFleteId(e.target.value);
+                setLineaId(""); // la línea pertenece al flete: se reinicia al cambiarlo
+              }}
               className={`${fieldCls} bg-white mt-1`}
             >
-              <option value="">— Sin línea —</option>
+              <option value="">— Sin flete —</option>
               {concesionarios.map((c) => (
-                <optgroup key={c.id} label={c.nombre}>
-                  {(c.lineas_transportista ?? []).map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.nombre}
-                    </option>
-                  ))}
-                </optgroup>
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs font-medium text-brand-700">
+            Línea transportista
+            <select
+              value={lineaId}
+              onChange={(e) => setLineaId(e.target.value)}
+              disabled={!fleteId || lineasDelFlete.length === 0}
+              className={`${fieldCls} bg-white mt-1 disabled:opacity-60 disabled:cursor-not-allowed`}
+            >
+              <option value="">
+                {!fleteId
+                  ? "— Elige un flete primero —"
+                  : lineasDelFlete.length === 0
+                    ? "— Sin líneas para este flete —"
+                    : "— Sin línea —"}
+              </option>
+              {lineasDelFlete.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.nombre}
+                </option>
               ))}
             </select>
           </label>
