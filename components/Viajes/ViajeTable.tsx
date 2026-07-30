@@ -432,15 +432,16 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       if (ovs) out.push({ viaje: v, ovs });
     }
     if (tab === "activos") {
-      // G&S: lo que se entrega primero va hasta arriba (cita ascendente). Los
-      // viajes sin cita caen al final; entre ellos, el más nuevo primero.
+      // G&S: primero los viajes CON cita, por cita ascendente (lo que se entrega
+      // primero va arriba). Después los que NO tienen cita, por antigüedad: los
+      // más viejos arriba y los más nuevos hasta abajo (número ascendente).
       out.sort((a, b) => {
         const ca = minCita(a.ovs);
         const cb = minCita(b.ovs);
         if (ca && cb) return ca.localeCompare(cb);
         if (ca) return -1;
         if (cb) return 1;
-        return b.viaje.numero - a.viaje.numero;
+        return a.viaje.numero - b.viaje.numero;
       });
     } else if (tab === "completados" || tab === "rechazados") {
       // Ordenar por cuándo concluyó el viaje (lo más reciente arriba). Los que no
