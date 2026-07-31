@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
+import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
 
 const VIAJE_SELECT = `
   *,
@@ -52,6 +53,9 @@ export async function POST(req: Request) {
       .from("termografos")
       .update({ asignado: true, viaje_id: data.id })
       .eq("id", data.termografo_id);
+    // Primer termógrafo del viaje → cargas pre-tránsito a En tránsito (viaje recién
+    // creado normalmente sin OVs todavía, pero se cubre por consistencia).
+    await ponerOVsEnTransitoAlAsignar(supabase, data.id, [data.termografo_id]);
   }
 
   await logAudit(supabase, {

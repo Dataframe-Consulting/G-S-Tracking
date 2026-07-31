@@ -3,6 +3,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { defineTrip, copelandTripId } from "@/lib/copeland";
 import { runSync } from "@/lib/sync";
 import { logAudit } from "@/lib/audit";
+import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
@@ -56,6 +57,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     tipo: "MODIFICACION",
     descripcion: `Asignó termógrafo ${id}`,
   });
+
+  // Si es el primer termógrafo del viaje, las cargas pre-tránsito pasan a En tránsito.
+  await ponerOVsEnTransitoAlAsignar(supabase, params.id, [id]);
 
   defineTrip({
     tripId: copelandTripId(viaje.numero, id),

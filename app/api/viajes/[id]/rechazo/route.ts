@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { STATUS_LABELS, type Status } from "@/lib/types";
 import { logAuditMany, STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit";
+import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
 
 // Cambio 2 — Rechazo de cargas + (opcional) creación de un viaje nuevo para
 // re-rutearlas. Todo en un solo endpoint, diseñado para ser IDEMPOTENTE:
@@ -260,6 +261,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         .eq("deshabilitado", false)
         .select("id");
       transferidos = (moved ?? []).map((t) => t.id as string);
+    }
+
+    // Al asignar termógrafo(s) al viaje nuevo, sus cargas copiadas (Pendiente)
+    // pasan a En tránsito (mismo criterio que cualquier viaje nuevo).
+    if (transferidos.length > 0) {
+      await ponerOVsEnTransitoAlAsignar(supabase, nuevoViaje.id, transferidos);
     }
 
     // Auditoría del viaje nuevo.

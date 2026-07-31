@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { defineTrip, closeTrip, copelandTripId } from "@/lib/copeland";
 import { logAuditMany } from "@/lib/audit";
 import { cToF } from "@/lib/temperature";
+import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
 
 const VIAJE_FIELD_LABELS: Record<string, string> = {
   lugar_inicio: "lugar de inicio",
@@ -114,6 +115,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         { id: newTrackerId, asignado: true, viaje_id: data.id },
         { onConflict: "id" }
       );
+
+      // Si es el primer termógrafo del viaje, las cargas pre-tránsito pasan a En tránsito.
+      await ponerOVsEnTransitoAlAsignar(supabase, params.id, [newTrackerId]);
 
       // Usar datos del viaje actualizado para DefineTrip
       const lugarInicio = (update.lugar_inicio as string | undefined) ?? prev?.lugar_inicio ?? "";
