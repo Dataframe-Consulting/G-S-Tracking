@@ -38,6 +38,24 @@ type OvNueva = {
   productos?: ProductoInput[];
 };
 
+// Carga nueva (creada desde cero) para el viaje nuevo. No proviene de un rechazo.
+type OvExtra = {
+  ov_ref?: string | null;
+  cliente?: string;
+  cedi?: string | null;
+  fecha_carga?: string;
+  lugar_carga?: string;
+  fecha_entrega?: string | null;
+  cita?: string | null;
+  tiene_cita?: boolean;
+  po?: string | null;
+  folio_cita?: string | null;
+  factura_gys?: string | null;
+  status?: Status;
+  instrucciones?: string;
+  productos?: ProductoInput[];
+};
+
 async function requireOperador(supabase: SupabaseClient) {
   const {
     data: { user },
@@ -114,13 +132,33 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const ovsNuevas: OvNueva[] = Array.isArray(body.ovs) ? body.ovs : [];
+    const ovsExtra: OvExtra[] = Array.isArray(body.ovs_extra) ? body.ovs_extra : [];
 
-    // Validar que las OV/REF capturadas no choquen con otras existentes (ov_ref es
-    // UNIQUE). Se excluyen las del propio viaje nuevo para no romper la idempotencia
-    // en un retry (donde las copias ya existen con esas refs).
+    // Validar cargas nuevas (creadas desde cero): requieren cliente, fecha y lugar
+    // de carga, y al menos un producto (igual que crear una OV normal).
+    for (const n of ovsExtra) {
+      if (!n.cliente || !n.fecha_carga || !n.lugar_carga) {
+        return NextResponse.json(
+          { error: "Cada carga nueva necesita cliente, fecha y lugar de carga" },
+          { status: 400 }
+        );
+      }
+      if (!(n.productos ?? []).some((p) => p?.producto_id)) {
+        return NextResponse.json(
+          { error: "Cada carga nueva necesita al menos un producto" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validar que las OV/REF capturadas (copias + nuevas) no choquen con otras
+    // existentes (ov_ref es UNIQUE). Se excluyen las del propio viaje nuevo para no
+    // romper la idempotencia en un retry (donde las OVs ya existen con esas refs).
     const refsCapturadas = [
       ...new Set(
-        ovsNuevas.map((o) => (o.ov_ref ?? "").trim()).filter((r) => r.length > 0)
+        [...ovsNuevas, ...ovsExtra]
+          .map((o) => (o.ov_ref ?? "").trim())
+          .filter((r) => r.length > 0)
       ),
     ];
     if (refsCapturadas.length > 0) {
@@ -243,6 +281,42 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           await supabase.from("orden_productos").insert(rows);
         }
       }
+
+      // Cargas nuevas (creadas desde cero en el modal) para el viaje nuevo.
+      for (const nueva of ovsExtra) {
+        const { data: creadaOV } = await supabase
+          .from("ordenes_venta")
+          .insert({
+            viaje_id: nuevoViaje.id,
+            ov_ref: (nueva.ov_ref ?? "").trim() || null,
+            cliente: nueva.cliente as string,
+            cedi: nueva.cedi ?? null,
+            fecha_carga: nueva.fecha_carga as string,
+            lugar_carga: nueva.lugar_carga as string,
+            fecha_entrega: nueva.fecha_entrega ?? null,
+            lugar_entrega: "",
+            cita: nueva.cita ?? null,
+            tiene_cita: nueva.tiene_cita ?? false,
+            po: nueva.po ?? null,
+            folio_cita: nueva.folio_cita ?? null,
+            factura_gys: nueva.factura_gys ?? null,
+            status: (nueva.status ?? "PENDIENTE") as Status,
+            instrucciones: nueva.instrucciones ?? "",
+          })
+          .select("id")
+          .single();
+        if (!creadaOV) continue;
+        const prods = (nueva.productos ?? [])
+          .filter((p) => p && p.producto_id)
+          .map((p) => ({
+            orden_id: creadaOV.id,
+            producto_id: p.producto_id as string,
+            cajas: p.cajas ?? null,
+          }));
+        if (prods.length > 0) {
+          await supabase.from("orden_productos").insert(prods);
+        }
+      }
     }
 
     // Transferir termógrafos seleccionados. Solo reasigna viaje_id; el filtro
@@ -278,6 +352,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         (tid) =>
           `Transfirió termógrafo ${tid} desde viaje #${String(viajeOrigen.numero).padStart(4, "0")}`
       ),
+      ...(ovsExtra.length > 0 ? [`Agregó ${ovsExtra.length} carga(s) nueva(s) al viaje`] : []),
     ];
     await logAuditMany(supabase, { viaje_id: nuevoViaje.id, tipo: "CREACION" }, descNuevo);
   }

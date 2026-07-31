@@ -1304,10 +1304,222 @@ const REJECTABLE_STATUSES: Status[] = ["PENDIENTE", "EN_PREPARACION", "TRANSITO"
 // cliente y CEDIS (destino). Los demás campos se heredan de la carga original.
 type OvOverride = { ov_ref: string; cliente: string; cedi: string };
 
+// Editor de una carga NUEVA (creada desde cero) para el viaje nuevo del rechazo.
+// Usa el mismo set de datos que una OV normal (OVFormData) y es repetible.
+function NuevaCargaCard({
+  form,
+  productos,
+  clientes,
+  lugares,
+  onChange,
+  onRemove,
+}: {
+  form: OVFormData;
+  productos: Producto[];
+  clientes: ClienteConCedis[];
+  lugares: { id: string; nombre: string }[];
+  onChange: (f: OVFormData) => void;
+  onRemove: () => void;
+}) {
+  const upd = <K extends keyof OVFormData>(k: K, v: OVFormData[K]) => onChange({ ...form, [k]: v });
+  const cedisDelCliente = clientes.find((c) => c.nombre === form.cliente)?.cedis ?? [];
+  const [lugarLibre, setLugarLibre] = useState<boolean>(
+    () => lugares.length === 0 || (!!form.lugar_carga && !lugares.some((l) => l.nombre === form.lugar_carga))
+  );
+
+  return (
+    <div className="rounded-xl border border-brand-200 bg-white p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold text-brand-700">Carga nueva</div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-xs text-brand-400 hover:text-red-500 transition"
+        >
+          Quitar
+        </button>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-2">
+        <label className="block text-xs font-medium text-brand-700">
+          OV / REF
+          <input
+            type="text"
+            value={form.ov_ref}
+            onChange={(e) => upd("ov_ref", e.target.value)}
+            className={`${fieldCls} font-mono mt-1`}
+          />
+        </label>
+        <label className="block text-xs font-medium text-brand-700">
+          Estatus
+          <select
+            value={form.status}
+            onChange={(e) => upd("status", e.target.value as Status)}
+            className={`${fieldCls} bg-white mt-1`}
+          >
+            {STATUS_VALUES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-medium text-brand-700">
+          Cliente *
+          <select
+            value={form.cliente}
+            onChange={(e) => {
+              upd("cliente", e.target.value);
+              upd("cedi", "");
+            }}
+            className={`${fieldCls} bg-white mt-1`}
+          >
+            <option value="">— Selecciona cliente —</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.nombre}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        {cedisDelCliente.length > 0 && (
+          <label className="block text-xs font-medium text-brand-700">
+            CEDIS *
+            <select
+              value={form.cedi}
+              onChange={(e) => upd("cedi", e.target.value)}
+              className={`${fieldCls} bg-white mt-1`}
+            >
+              <option value="">— Selecciona CEDIS —</option>
+              {cedisDelCliente.map((d) => (
+                <option key={d.id} value={d.nombre}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="block text-xs font-medium text-brand-700">
+          Fecha de carga *
+          <DatePicker
+            value={form.fecha_carga}
+            onChange={(v) => upd("fecha_carga", v)}
+            className={`${fieldCls} mt-1`}
+          />
+        </label>
+        <div className="block text-xs font-medium text-brand-700">
+          Lugar de carga *
+          {lugares.length > 0 ? (
+            <div className="mt-1 space-y-1.5">
+              <select
+                value={lugarLibre ? "__otro__" : form.lugar_carga}
+                onChange={(e) => {
+                  if (e.target.value === "__otro__") {
+                    setLugarLibre(true);
+                    upd("lugar_carga", "");
+                  } else {
+                    setLugarLibre(false);
+                    upd("lugar_carga", e.target.value);
+                  }
+                }}
+                className={`${fieldCls} bg-white`}
+              >
+                <option value="">— Selecciona lugar —</option>
+                {lugares.map((l) => (
+                  <option key={l.id} value={l.nombre}>
+                    {l.nombre}
+                  </option>
+                ))}
+                <option value="__otro__">Otro (texto libre)…</option>
+              </select>
+              {lugarLibre && (
+                <input
+                  type="text"
+                  placeholder="Escribe el lugar de carga"
+                  value={form.lugar_carga}
+                  onChange={(e) => upd("lugar_carga", e.target.value)}
+                  className={fieldCls}
+                />
+              )}
+            </div>
+          ) : (
+            <input
+              type="text"
+              value={form.lugar_carga}
+              onChange={(e) => upd("lugar_carga", e.target.value)}
+              className={`${fieldCls} mt-1`}
+            />
+          )}
+        </div>
+      </div>
+
+      <ProductosEditor
+        rows={form.productos}
+        productos={productos}
+        onChange={(rows) => upd("productos", rows)}
+      />
+
+      <label className="block text-xs font-medium text-brand-700">
+        Instrucciones
+        <textarea
+          rows={2}
+          value={form.instrucciones}
+          onChange={(e) => upd("instrucciones", e.target.value)}
+          className={`${fieldCls} mt-1 resize-none`}
+        />
+      </label>
+
+      <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 space-y-2">
+        <label className="flex items-center gap-2 text-xs font-medium text-brand-800 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={form.tiene_cita}
+            onChange={(e) => upd("tiene_cita", e.target.checked)}
+            className="h-4 w-4 rounded border-brand-300 text-brand-700 focus:ring-brand-500"
+          />
+          ¿Existe cita?
+        </label>
+        {form.tiene_cita && (
+          <div className="grid sm:grid-cols-2 gap-2">
+            <label className="block text-xs font-medium text-brand-700">
+              PO
+              <input type="text" value={form.po} onChange={(e) => upd("po", e.target.value)} className={`${fieldCls} mt-1`} />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Folio de cita
+              <input type="text" value={form.folio_cita} onChange={(e) => upd("folio_cita", e.target.value)} className={`${fieldCls} mt-1`} />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Fecha de la cita
+              <DatePicker value={form.fecha_entrega} onChange={(v) => upd("fecha_entrega", v)} className={`${fieldCls} mt-1`} />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Hora de la cita
+              <input
+                type="time"
+                value={form.cita}
+                onChange={(e) => upd("cita", e.target.value)}
+                onClick={(e) => e.currentTarget.showPicker?.()}
+                className={`${fieldCls} mt-1`}
+              />
+            </label>
+            <label className="block text-xs font-medium text-brand-700">
+              Factura
+              <input type="text" value={form.factura_gys} onChange={(e) => upd("factura_gys", e.target.value)} className={`${fieldCls} mt-1`} />
+            </label>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RechazoModal({
   viaje,
   ordenes,
   clientes,
+  productos,
+  lugares,
   termografosActivos,
   initialOvId,
   onClose,
@@ -1316,6 +1528,8 @@ function RechazoModal({
   viaje: Viaje;
   ordenes: OrdenVenta[];
   clientes: ClienteConCedis[];
+  productos: Producto[];
+  lugares: { id: string; nombre: string }[];
   termografosActivos: Termografo[];
   initialOvId: string;
   onClose: () => void;
@@ -1343,6 +1557,9 @@ function RechazoModal({
   });
   // Overrides por carga (keyed por origen_ov_id). Se completan bajo demanda.
   const [ovOverrides, setOvOverrides] = useState<Record<string, OvOverride>>({});
+  // Cargas NUEVAS (creadas desde cero) que se agregan al viaje nuevo.
+  const [cargasNuevas, setCargasNuevas] = useState<OVFormData[]>([]);
+  const hoy = new Date().toISOString().slice(0, 10);
 
   // Default de una carga: OV/REF vacía (se captura nueva), cliente/CEDIS heredados.
   function defaultOverride(id: string): OvOverride {
@@ -1402,6 +1619,22 @@ function RechazoModal({
           return;
         }
       }
+      // Validar cargas nuevas (creadas desde cero) con el mismo criterio que una OV.
+      for (const nueva of cargasNuevas) {
+        if (!nueva.cliente || !nueva.fecha_carga || !nueva.lugar_carga) {
+          toast.error("Completa cliente, fecha y lugar de carga de las cargas nuevas");
+          return;
+        }
+        const cedisNueva = clientes.find((c) => c.nombre === nueva.cliente)?.cedis ?? [];
+        if (cedisNueva.length > 0 && !nueva.cedi) {
+          toast.error("Selecciona el CEDIS de las cargas nuevas");
+          return;
+        }
+        if (rowsToPayload(nueva.productos).length === 0) {
+          toast.error("Cada carga nueva necesita al menos un producto");
+          return;
+        }
+      }
     }
     setSubmitting(true);
     const body = crearViaje
@@ -1432,6 +1665,23 @@ function RechazoModal({
               cedi: ovr.cedi || null,
             };
           }),
+          // Cargas nuevas creadas desde cero para el viaje nuevo.
+          ovs_extra: cargasNuevas.map((n) => ({
+            ov_ref: n.ov_ref.trim() || null,
+            cliente: n.cliente,
+            cedi: n.cedi || null,
+            fecha_carga: n.fecha_carga,
+            lugar_carga: n.lugar_carga,
+            fecha_entrega: n.tiene_cita ? n.fecha_entrega || null : null,
+            cita: n.tiene_cita ? n.cita || null : null,
+            tiene_cita: n.tiene_cita,
+            po: n.tiene_cita ? n.po || null : null,
+            folio_cita: n.tiene_cita ? n.folio_cita || null : null,
+            factura_gys: n.tiene_cita ? n.factura_gys || null : null,
+            status: n.status,
+            instrucciones: n.instrucciones,
+            productos: rowsToPayload(n.productos),
+          })),
         }
       : { ov_ids: Array.from(selOv), crear_viaje: false };
 
@@ -1614,6 +1864,33 @@ function RechazoModal({
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Cargas nuevas creadas desde cero para el viaje nuevo */}
+              <div className="pt-2 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-brand-700">Cargas nuevas (opcional)</div>
+                  <button
+                    type="button"
+                    onClick={() => setCargasNuevas((prev) => [...prev, emptyOVForm(hoy)])}
+                    className="text-xs font-medium text-brand-600 hover:text-brand-900 transition"
+                  >
+                    + Agregar carga nueva
+                  </button>
+                </div>
+                {cargasNuevas.map((f, i) => (
+                  <NuevaCargaCard
+                    key={i}
+                    form={f}
+                    productos={productos}
+                    clientes={clientes}
+                    lugares={lugares}
+                    onChange={(nf) =>
+                      setCargasNuevas((prev) => prev.map((x, idx) => (idx === i ? nf : x)))
+                    }
+                    onRemove={() => setCargasNuevas((prev) => prev.filter((_, idx) => idx !== i))}
+                  />
+                ))}
               </div>
             </>
           )}
@@ -2600,6 +2877,8 @@ export function ViajeDetail({
           viaje={viaje}
           ordenes={ordenes}
           clientes={clientes}
+          productos={productos}
+          lugares={lugaresOV}
           termografosActivos={termografosActivos}
           initialOvId={rechazoOv.id}
           onClose={() => setRechazoOv(null)}
