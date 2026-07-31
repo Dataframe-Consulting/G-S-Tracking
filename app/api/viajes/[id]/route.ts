@@ -5,6 +5,7 @@ import { defineTrip, closeTrip, copelandTripId } from "@/lib/copeland";
 import { logAuditMany } from "@/lib/audit";
 import { cToF } from "@/lib/temperature";
 import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
+import { IMPORTACION_LABELS, type ImportacionEstado } from "@/lib/types";
 
 const VIAJE_FIELD_LABELS: Record<string, string> = {
   lugar_inicio: "lugar de inicio",
@@ -59,7 +60,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const { data: prev } = await supabase
     .from("viajes")
     .select(
-      "termografo_id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin, flete_cargo, responsable_id, numero, temp_min, temp_max"
+      "termografo_id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin, flete_cargo, responsable_id, numero, temp_min, temp_max, es_importacion, importacion_estado"
     )
     .eq("id", params.id)
     .single();
@@ -83,8 +84,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     "temp_min",
     "temp_max",
     "temp_rango_id",
+    "es_importacion",
+    "importacion_estado",
   ];
   for (const k of allowed) if (k in body) update[k] = body[k];
+  // Si no es importación, se limpia la etapa.
+  if (update.es_importacion === false) update.importacion_estado = null;
 
   const { data, error } = await supabase
     .from("viajes")
@@ -170,6 +175,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           `Cambió rango de temperatura de ${rangoLabel(prev.temp_min, prev.temp_max)} a ${rangoLabel(data.temp_min, data.temp_max)}`
         );
       }
+    }
+
+    // Importación del viaje (marca + etapa).
+    if ("es_importacion" in body || "importacion_estado" in body) {
+      const impLabel = (imp: unknown, est: unknown) =>
+        !imp ? "No" : est ? IMPORTACION_LABELS[est as ImportacionEstado] ?? String(est) : "Sí (sin etapa)";
+      const antes = impLabel(prev.es_importacion, prev.importacion_estado);
+      const despues = impLabel(data.es_importacion, data.importacion_estado);
+      if (antes !== despues) descripciones.push(`Cambió importación de ${antes} a ${despues}`);
     }
 
     await logAuditMany(supabase, { viaje_id: params.id, tipo: "MODIFICACION" }, descripciones);

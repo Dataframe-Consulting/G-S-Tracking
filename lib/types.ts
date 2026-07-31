@@ -41,6 +41,30 @@ export const STATUS_DOT_CLASSES: Record<Status, string> = {
   RECHAZO_CALIDAD: "bg-red-500"
 };
 
+// Importación (por viaje): etapa actual del proceso. Una a la vez (o ninguna).
+export type ImportacionEstado =
+  | "INSPECCION_CALIDAD"
+  | "EN_CRUCE"
+  | "INTACTICS"
+  | "INSPECCION_SADER"
+  | "CERTIFICADO";
+
+export const IMPORTACION_ESTADOS: ImportacionEstado[] = [
+  "INSPECCION_CALIDAD",
+  "EN_CRUCE",
+  "INTACTICS",
+  "INSPECCION_SADER",
+  "CERTIFICADO",
+];
+
+export const IMPORTACION_LABELS: Record<ImportacionEstado, string> = {
+  INSPECCION_CALIDAD: "En inspección de Calidad",
+  EN_CRUCE: "En cruce",
+  INTACTICS: "En InTactics (Almacenado)",
+  INSPECCION_SADER: "En inspección SADER",
+  CERTIFICADO: "Certificado",
+};
+
 export interface Producto {
   id: string;
   nombre: string;
@@ -113,6 +137,9 @@ export interface Viaje {
   placas_tracto: string | null;
   placas_caja: string | null;
   contacto_unidad: string | null;
+  /** Importación (por viaje): si es carga de importación y su etapa actual. */
+  es_importacion: boolean;
+  importacion_estado: ImportacionEstado | null;
   ubicacion_ciudad: string | null;
   ubicacion_estado: string | null;
   ubicacion_pais: string | null;

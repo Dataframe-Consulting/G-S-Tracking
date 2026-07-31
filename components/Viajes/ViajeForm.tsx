@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { CiudadCombobox } from "@/components/ui/CiudadCombobox";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { IMPORTACION_ESTADOS, IMPORTACION_LABELS } from "@/lib/types";
 
 const field =
   "mt-1 w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder:text-brand-300 transition";
@@ -45,6 +46,8 @@ export function ViajeForm({
     fecha_fin: today,
     flete_cargo: "",
     responsable_id: "",
+    es_importacion: false,
+    importacion_estado: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -65,6 +68,8 @@ export function ViajeForm({
         fecha_fin: form.fecha_fin,
         flete_cargo: form.flete_cargo || null,
         responsable_id: form.responsable_id || null,
+        es_importacion: form.es_importacion,
+        importacion_estado: form.es_importacion ? form.importacion_estado || null : null,
       }),
     });
     setSaving(false);
@@ -153,6 +158,39 @@ export function ViajeForm({
             ))}
           </select>
         </label>
+      </div>
+
+      <SectionTitle>Importación</SectionTitle>
+      <div className="rounded-2xl border border-brand-200 bg-brand-50/40 p-4 space-y-3">
+        <label className="flex items-center gap-2 text-sm font-medium text-brand-800 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={form.es_importacion}
+            onChange={(e) => {
+              update("es_importacion", e.target.checked);
+              if (!e.target.checked) update("importacion_estado", "");
+            }}
+            className="h-4 w-4 rounded border-brand-300 text-brand-700 focus:ring-brand-500"
+          />
+          Es importación
+        </label>
+        {form.es_importacion && (
+          <label className="block text-sm font-medium text-brand-700 max-w-sm">
+            Etapa de importación
+            <select
+              value={form.importacion_estado}
+              onChange={(e) => update("importacion_estado", e.target.value)}
+              className={`${field} bg-white`}
+            >
+              <option value="">— Sin etapa —</option>
+              {IMPORTACION_ESTADOS.map((s) => (
+                <option key={s} value={s}>
+                  {IMPORTACION_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="flex items-center gap-3 pt-2 border-t border-brand-100">

@@ -17,7 +17,7 @@ import type {
   Termografo,
   Viaje,
 } from "@/lib/types";
-import { STATUS_LABELS, STATUS_VALUES } from "@/lib/types";
+import { STATUS_LABELS, STATUS_VALUES, IMPORTACION_ESTADOS, IMPORTACION_LABELS } from "@/lib/types";
 import { StatusBadge } from "@/components/Cargas/StatusBadge";
 import { TempGauge } from "@/components/Temperatura/TempGauge";
 import { TempChart } from "@/components/Temperatura/TempChart";
@@ -1092,6 +1092,8 @@ function DatosViajeModal({
 
   const [fleteId, setFleteId] = useState(initialFleteId);
   const [lineaId, setLineaId] = useState(viaje.linea_transportista_id ?? "");
+  const [esImportacion, setEsImportacion] = useState<boolean>(viaje.es_importacion ?? false);
+  const [importacionEstado, setImportacionEstado] = useState<string>(viaje.importacion_estado ?? "");
   const [form, setForm] = useState({
     operador: viaje.operador ?? "",
     modelo: viaje.modelo ?? "",
@@ -1124,6 +1126,8 @@ function DatosViajeModal({
       placas_tracto: form.placas_tracto.trim() || null,
       placas_caja: form.placas_caja.trim() || null,
       contacto_unidad: form.contacto_unidad.trim() || null,
+      es_importacion: esImportacion,
+      importacion_estado: esImportacion ? importacionEstado || null : null,
     };
     const res = await fetch(`/api/viajes/${viaje.id}`, {
       method: "PATCH",
@@ -1269,6 +1273,39 @@ function DatosViajeModal({
               className={`${fieldCls} mt-1`}
             />
           </label>
+
+          {/* Importación (por viaje) */}
+          <div className="rounded-xl border border-brand-200 bg-brand-50/40 p-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-brand-800 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={esImportacion}
+                onChange={(e) => {
+                  setEsImportacion(e.target.checked);
+                  if (!e.target.checked) setImportacionEstado("");
+                }}
+                className="h-4 w-4 rounded border-brand-300 text-brand-700 focus:ring-brand-500"
+              />
+              Es importación
+            </label>
+            {esImportacion && (
+              <label className="block text-xs font-medium text-brand-700">
+                Etapa de importación
+                <select
+                  value={importacionEstado}
+                  onChange={(e) => setImportacionEstado(e.target.value)}
+                  className={`${fieldCls} bg-white mt-1`}
+                >
+                  <option value="">— Sin etapa —</option>
+                  {IMPORTACION_ESTADOS.map((s) => (
+                    <option key={s} value={s}>
+                      {IMPORTACION_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3 px-6 pb-5 pt-2 border-t border-brand-50">
@@ -3342,6 +3379,17 @@ export function ViajeDetail({
               </button>
             </div>
           </div>
+
+          {viaje.es_importacion && (
+            <InfoCell
+              label="Importación"
+              value={
+                viaje.importacion_estado
+                  ? IMPORTACION_LABELS[viaje.importacion_estado]
+                  : "Sí (sin etapa)"
+              }
+            />
+          )}
 
           <InfoCell
             label="Última lectura"

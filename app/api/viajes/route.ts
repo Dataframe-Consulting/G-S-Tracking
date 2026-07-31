@@ -38,6 +38,8 @@ export async function POST(req: Request) {
     flete_cargo: body.flete_cargo ?? null,
     termografo_id: body.termografo_id ?? null,
     responsable_id: body.responsable_id ?? null,
+    es_importacion: body.es_importacion ?? false,
+    importacion_estado: body.es_importacion ? body.importacion_estado ?? null : null,
   };
 
   const { data, error } = await supabase
