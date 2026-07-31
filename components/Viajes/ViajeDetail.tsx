@@ -3380,16 +3380,32 @@ export function ViajeDetail({
             </div>
           </div>
 
-          {viaje.es_importacion && (
-            <InfoCell
-              label="Importación"
-              value={
-                viaje.importacion_estado
+          {/* Importación del viaje (siempre visible, editable desde aquí) */}
+          <div className="rounded-xl border border-brand-100 bg-white px-4 py-3">
+            <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-1">
+              Importación
+            </div>
+            <div
+              className={`text-sm font-medium ${viaje.es_importacion ? "text-brand-900" : "text-brand-300"}`}
+            >
+              {viaje.es_importacion
+                ? viaje.importacion_estado
                   ? IMPORTACION_LABELS[viaje.importacion_estado]
                   : "Sí (sin etapa)"
-              }
-            />
-          )}
+                : "No"}
+            </div>
+            <div className="flex items-end justify-end mt-0.5">
+              <button
+                onClick={async () => {
+                  await loadConcesionarios();
+                  setShowDatosViaje(true);
+                }}
+                className="text-xs text-brand-500 hover:text-brand-900 transition shrink-0"
+              >
+                Editar
+              </button>
+            </div>
+          </div>
 
           <InfoCell
             label="Última lectura"
