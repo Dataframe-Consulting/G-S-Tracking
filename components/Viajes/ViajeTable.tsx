@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { Viaje, OrdenVenta } from "@/lib/types";
-import { STATUS_LABELS, STATUS_CLASSES } from "@/lib/types";
+import { STATUS_LABELS, STATUS_CLASSES, STATUS_DOT_CLASSES } from "@/lib/types";
 import { TempIndicator } from "@/components/Cargas/TempIndicator";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { formatFecha } from "@/lib/fecha";
@@ -770,7 +770,11 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           className="inline-flex flex-wrap gap-1 text-xs font-medium text-brand-700"
                         >
                           {ovs.map((o) => (
-                            <span key={o.id} className="px-2 py-0.5 rounded-lg bg-brand-50">
+                            <span key={o.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-brand-50">
+                              <span
+                                className={`inline-block w-2 h-2 rounded-full shrink-0 ${STATUS_DOT_CLASSES[o.status]}`}
+                                title={STATUS_LABELS[o.status]}
+                              />
                               {o.ov_ref || "—"}
                             </span>
                           ))}
@@ -900,7 +904,13 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           {ovCount > 0 ? (
                             <span className="inline-flex flex-col gap-0.5 text-xs font-medium px-2 py-1 rounded-lg transition text-brand-700 bg-brand-50 hover:bg-brand-200 cursor-pointer">
                               {ovs.map((o) => (
-                                <span key={o.id}>{o.ov_ref || "—"}</span>
+                                <span key={o.id} className="inline-flex items-center gap-1.5">
+                                  <span
+                                    className={`inline-block w-2 h-2 rounded-full shrink-0 ${STATUS_DOT_CLASSES[o.status]}`}
+                                    title={STATUS_LABELS[o.status]}
+                                  />
+                                  {o.ov_ref || "—"}
+                                </span>
                               ))}
                             </span>
                           ) : (

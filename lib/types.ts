@@ -21,12 +21,24 @@ export const STATUS_LABELS: Record<Status, string> = {
   RECHAZO_CALIDAD: "Rechazo"
 };
 
+// Pastilla (badge) de status: fondo + texto. Esquema: pendiente gris, proceso de
+// carga naranja, en tránsito verde, entregado azul, rechazo rojo.
 export const STATUS_CLASSES: Record<Status, string> = {
-  PENDIENTE: "bg-slate-200 text-slate-800",
-  EN_PREPARACION: "bg-blue-100 text-blue-800",
-  TRANSITO: "bg-amber-100 text-amber-800",
-  ENTREGADO: "bg-emerald-100 text-emerald-800",
+  PENDIENTE: "bg-slate-100 text-slate-700",
+  EN_PREPARACION: "bg-orange-100 text-orange-800",
+  TRANSITO: "bg-emerald-100 text-emerald-800",
+  ENTREGADO: "bg-blue-100 text-blue-800",
   RECHAZO_CALIDAD: "bg-red-100 text-red-800"
+};
+
+// Color sólido del punto/círculo de status, para indicadores compactos en tablas
+// (mismo esquema que STATUS_CLASSES).
+export const STATUS_DOT_CLASSES: Record<Status, string> = {
+  PENDIENTE: "bg-slate-400",
+  EN_PREPARACION: "bg-orange-500",
+  TRANSITO: "bg-emerald-500",
+  ENTREGADO: "bg-blue-500",
+  RECHAZO_CALIDAD: "bg-red-500"
 };
 
 export interface Producto {
