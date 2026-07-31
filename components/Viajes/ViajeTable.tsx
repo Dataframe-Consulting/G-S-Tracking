@@ -420,7 +420,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
   const [fHasta, setFHasta] = useState("");
   const [fOrigen, setFOrigen] = useState("");
   const [fCliente, setFCliente] = useState("");
-  const [fTermografo, setFTermografo] = useState("");
+  const [fAlerta, setFAlerta] = useState(false);
   const [fResponsable, setFResponsable] = useState("");
 
   // Items de la pestaña activa: { viaje, ovs visibles }. Un viaje mixto aparece
@@ -486,7 +486,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       .map(([value, label]) => ({ value, label }));
   }, [tabItems]);
 
-  const anyFilter = fOvRef || fFlete || fDesde || fHasta || fOrigen || fCliente || fTermografo || fResponsable;
+  const anyFilter = fOvRef || fFlete || fDesde || fHasta || fOrigen || fCliente || fAlerta || fResponsable;
 
   function clearFilters() {
     setFOvRef("");
@@ -495,7 +495,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
     setFHasta("");
     setFOrigen("");
     setFCliente("");
-    setFTermografo("");
+    setFAlerta(false);
     setFResponsable("");
   }
 
@@ -518,13 +518,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
         if (!match) return false;
       }
       if (fOrigen && v.lugar_inicio !== fOrigen) return false;
-      if (
-        fTermografo &&
-        !(v.termografos ?? []).some((t) =>
-          t.id.toLowerCase().includes(fTermografo.toLowerCase())
-        )
-      )
-        return false;
+      if (fAlerta && !v.alerta_activa) return false;
       if (fResponsable && v.responsable_id !== fResponsable) return false;
       if (fOvRef) {
         const match = ovs.some((o) => o.ov_ref?.toLowerCase().includes(ovLower));
@@ -536,7 +530,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       }
       return true;
     });
-  }, [tabItems, fOvRef, fFlete, fDesde, fHasta, fOrigen, fCliente, fTermografo, fResponsable]);
+  }, [tabItems, fOvRef, fFlete, fDesde, fHasta, fOrigen, fCliente, fAlerta, fResponsable]);
 
   const handleTermografoAssigned = useCallback(
     (_viajeId: string, _termografoId: string) => {
@@ -639,17 +633,21 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
             onChange={setFCliente}
             options={clientesOpts.map((v) => ({ value: v, label: v }))}
           />
-          <input
-            type="text"
-            value={fTermografo}
-            onChange={(e) => setFTermografo(e.target.value)}
-            placeholder="Buscar termógrafo…"
-            className={`rounded-lg border px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 transition w-40 ${
-              fTermografo
-                ? "border-brand-400 text-brand-900 font-medium"
-                : "border-brand-200 text-brand-400"
+          <button
+            type="button"
+            onClick={() => setFAlerta((a) => !a)}
+            aria-pressed={fAlerta}
+            className={`rounded-lg border px-2.5 py-1.5 text-xs transition inline-flex items-center gap-1.5 ${
+              fAlerta
+                ? "border-red-400 bg-red-50 text-red-700 font-medium"
+                : "border-brand-200 text-brand-400 bg-white hover:border-brand-300"
             }`}
-          />
+          >
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${fAlerta ? "bg-red-500" : "bg-brand-300"}`}
+            />
+            Con alerta activa
+          </button>
           <FilterSelect
             label="Responsable de carga"
             value={fResponsable}
