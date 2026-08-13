@@ -9,6 +9,7 @@ import { STATUS_LABELS, STATUS_CLASSES, STATUS_DOT_CLASSES } from "@/lib/types";
 import { TempIndicator } from "@/components/Cargas/TempIndicator";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { formatFecha } from "@/lib/fecha";
+import { tempEstado } from "@/lib/temperature";
 
 function unique(values: (string | null | undefined)[]): string[] {
   return Array.from(new Set(values.filter(Boolean) as string[])).sort();
@@ -19,6 +20,15 @@ function unique(values: (string | null | undefined)[]): string[] {
 // usar SIEMPRE este mismo valor para no desincronizarse.
 function fleteDe(v: Viaje): string | null {
   return v.linea?.concesionario?.nombre ?? v.flete_cargo ?? null;
+}
+
+// Fuera de rango = exactamente lo que pinta de rojo/azul el TempIndicator de la fila.
+// Antes el filtro usaba viajes.alerta_activa, que NO es lo mismo: esa columna solo se
+// enciende tras 30 min continuos fuera de rango (SOSTENIDO_MINUTES en lib/alertas.ts),
+// así que un viaje recién salido del rango se veía rojo pero no aparecía al filtrar.
+// Se usan las mismas entradas que el indicador para que filtro y color no se separen.
+function fueraDeRango(v: Viaje): boolean {
+  return tempEstado(v.temp_carga ?? v.temp_actual, v.temp_min, v.temp_max) !== "ok";
 }
 
 // Cita (fecha_entrega) más próxima entre las OVs visibles de un viaje, o null si
@@ -420,7 +430,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
   const [fHasta, setFHasta] = useState("");
   const [fOrigen, setFOrigen] = useState("");
   const [fCliente, setFCliente] = useState("");
-  const [fAlerta, setFAlerta] = useState(false);
+  const [fFueraRango, setFFueraRango] = useState(false);
   const [fResponsable, setFResponsable] = useState("");
 
   // Items de la pestaña activa: { viaje, ovs visibles }. Un viaje mixto aparece
@@ -486,7 +496,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       .map(([value, label]) => ({ value, label }));
   }, [tabItems]);
 
-  const anyFilter = fOvRef || fFlete || fDesde || fHasta || fOrigen || fCliente || fAlerta || fResponsable;
+  const anyFilter = fOvRef || fFlete || fDesde || fHasta || fOrigen || fCliente || fFueraRango || fResponsable;
 
   function clearFilters() {
     setFOvRef("");
@@ -495,7 +505,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
     setFHasta("");
     setFOrigen("");
     setFCliente("");
-    setFAlerta(false);
+    setFFueraRango(false);
     setFResponsable("");
   }
 
@@ -518,7 +528,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
         if (!match) return false;
       }
       if (fOrigen && v.lugar_inicio !== fOrigen) return false;
-      if (fAlerta && !v.alerta_activa) return false;
+      if (fFueraRango && !fueraDeRango(v)) return false;
       if (fResponsable && v.responsable_id !== fResponsable) return false;
       if (fOvRef) {
         const match = ovs.some((o) => o.ov_ref?.toLowerCase().includes(ovLower));
@@ -530,7 +540,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
       }
       return true;
     });
-  }, [tabItems, fOvRef, fFlete, fDesde, fHasta, fOrigen, fCliente, fAlerta, fResponsable]);
+  }, [tabItems, fOvRef, fFlete, fDesde, fHasta, fOrigen, fCliente, fFueraRango, fResponsable]);
 
   const handleTermografoAssigned = useCallback(
     (_viajeId: string, _termografoId: string) => {
@@ -635,18 +645,18 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
           />
           <button
             type="button"
-            onClick={() => setFAlerta((a) => !a)}
-            aria-pressed={fAlerta}
+            onClick={() => setFFueraRango((a) => !a)}
+            aria-pressed={fFueraRango}
             className={`rounded-lg border px-2.5 py-1.5 text-xs transition inline-flex items-center gap-1.5 ${
-              fAlerta
+              fFueraRango
                 ? "border-red-400 bg-red-50 text-red-700 font-medium"
                 : "border-brand-200 text-brand-400 bg-white hover:border-brand-300"
             }`}
           >
             <span
-              className={`inline-block w-2 h-2 rounded-full ${fAlerta ? "bg-red-500" : "bg-brand-300"}`}
+              className={`inline-block w-2 h-2 rounded-full ${fFueraRango ? "bg-red-500" : "bg-brand-300"}`}
             />
-            Con alerta activa
+            Fuera de rango
           </button>
           <FilterSelect
             label="Responsable de carga"
