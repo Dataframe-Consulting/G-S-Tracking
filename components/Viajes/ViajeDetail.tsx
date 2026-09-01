@@ -11,6 +11,7 @@ import type {
   LecturaTemperatura,
   OrdenVenta,
   Producto,
+  PuntoRecorrido,
   RangoTemperatura,
   Responsable,
   Status,
@@ -2052,6 +2053,7 @@ type ViajeEditData = {
 export function ViajeDetail({
   viaje: initialViaje,
   lecturas: initialLecturas,
+  recorrido: initialRecorrido,
   alertas,
   termografos: initialTermografos,
   auditoria,
@@ -2059,6 +2061,7 @@ export function ViajeDetail({
 }: {
   viaje: Viaje;
   lecturas: LecturaTemperatura[];
+  recorrido: PuntoRecorrido[];
   alertas: AlertaLog[];
   termografos: Termografo[];
   auditoria: Auditoria[];
@@ -2068,6 +2071,9 @@ export function ViajeDetail({
   const [viaje, setViaje] = useState(initialViaje);
   const [ordenes, setOrdenes] = useState<OrdenVenta[]>(initialViaje.ordenes_venta ?? []);
   const [lecturas, setLecturas] = useState(initialLecturas);
+  // Recorrido completo del viaje (no solo las últimas 150 lecturas), en orden
+  // cronológico ascendente. Solo lo usa el mapa.
+  const [recorrido, setRecorrido] = useState(initialRecorrido);
   const [termografos, setTermografos] = useState<Termografo[]>(initialTermografos);
   const [activeTermografoIdx, setActiveTermografoIdx] = useState(0);
 
@@ -2153,16 +2159,6 @@ export function ViajeDetail({
     { id: string; nombre: string | null; email: string | null }[]
   >([]);
 
-  const position =
-    viaje.lat != null && viaje.lng != null
-      ? { lat: Number(viaje.lat), lng: Number(viaje.lng) }
-      : null;
-
-  const path = [...lecturas]
-    .filter((l) => l.lat != null && l.lng != null)
-    .reverse()
-    .map((l) => ({ lat: Number(l.lat), lng: Number(l.lng) }));
-
   // Rango efectivo: SOLO el rango propio del viaje (manual o catálogo). Los
   // productos ya no tienen temperatura (Fase 4); si no hay rango, queda vacío.
   const hasViajeRange = viaje.temp_min != null && viaje.temp_max != null;
@@ -2244,6 +2240,83 @@ export function ViajeDetail({
     () => termografos.filter((t) => !t.deshabilitado),
     [termografos]
   );
+
+  // Recorrido de CADA termógrafo por separado, en orden cronológico.
+  //
+  // El aparato manda temperatura cada ~6 min pero refresca posición cada ~30,
+  // así que repite coordenada varias veces seguidas: nos quedamos solo con los
+  // cambios de posición. Misma línea, muchos menos puntos que dibujar.
+  const rutasPorTermografo = useMemo(() => {
+    const map = new Map<string, Array<{ lat: number; lng: number }>>();
+    for (const p of recorrido) {
+      if (p.lat == null || p.lng == null) continue;
+      const puntos = map.get(p.termografo_id) ?? [];
+      const lat = Number(p.lat);
+      const lng = Number(p.lng);
+      const ultimo = puntos[puntos.length - 1];
+      if (!ultimo || ultimo.lat !== lat || ultimo.lng !== lng) {
+        puntos.push({ lat, lng });
+      }
+      map.set(p.termografo_id, puntos);
+    }
+    return map;
+  }, [recorrido]);
+
+  // El termógrafo que manda en el bloque de Monitoreo: el del carrusel. Mapa,
+  // gauge y gráfica muestran los tres al MISMO aparato.
+  const termografoEnFoco = termografos[activeTermografoIdx] ?? null;
+
+  // Ruta canónica del viaje: la que ven TODOS los termógrafos activos.
+  //
+  // Los aparatos activos van en la misma caja del mismo tráiler, así que
+  // físicamente recorren lo mismo. Mostrarles rutas distintas solo confundiría
+  // sobre dónde va realmente la carga, y las diferencias son ruido de GPS: no
+  // refrescan posición al mismo tiempo y llegan a ir 40+ km desfasados. Se toma
+  // la del activo con mejor cobertura (más posiciones distintas) y esa misma se
+  // dibuja en todas sus pestañas del carrusel.
+  const rutaViaje = useMemo(() => {
+    let mejor: Array<{ lat: number; lng: number }> = [];
+    for (const t of termografosActivos) {
+      const puntos = rutasPorTermografo.get(t.id) ?? [];
+      if (puntos.length > mejor.length) mejor = puntos;
+    }
+    return mejor;
+  }, [termografosActivos, rutasPorTermografo]);
+
+  // Ruta del mapa: UNA sola línea.
+  //
+  // - Termógrafo ACTIVO en foco → la ruta canónica del viaje. Todos los activos
+  //   muestran exactamente lo mismo: dónde va la carga.
+  // - Termógrafo DESHABILITADO en foco → su propio recorrido, que quedó
+  //   congelado al deshabilitarlo. Ahí sí interesa ver hasta dónde llegó ése,
+  //   mientras los que siguen activos continúan avanzando en sus pestañas.
+  const path = useMemo(() => {
+    if (termografoEnFoco?.deshabilitado) {
+      return rutasPorTermografo.get(termografoEnFoco.id) ?? [];
+    }
+    return rutaViaje;
+  }, [termografoEnFoco, rutasPorTermografo, rutaViaje]);
+
+  // El pin va al final de la ruta en foco, para que coincida con la línea. Sin
+  // termógrafo (o sin lecturas con GPS) se cae a la última posición del viaje.
+  const position = useMemo(() => {
+    const fin = path[path.length - 1];
+    if (fin) return fin;
+    return viaje.lat != null && viaje.lng != null
+      ? { lat: Number(viaje.lat), lng: Number(viaje.lng) }
+      : null;
+  }, [path, viaje.lat, viaje.lng]);
+
+  // Última temperatura del termógrafo en foco: pinta el pin del mapa con el
+  // mismo criterio que el gauge de al lado (tempEstado), para que no se
+  // contradigan — antes el pin seguía a viaje.alerta_activa y podía verse verde
+  // con el gauge en rojo.
+  const fueraDeRangoEnFoco = useMemo(() => {
+    if (!termografoEnFoco) return !!viaje.alerta_activa;
+    const ultima = (lecturasByTermografo.get(termografoEnFoco.id) ?? [])[0];
+    if (ultima?.temperatura == null) return !!viaje.alerta_activa;
+    return tempEstado(Number(ultima.temperatura), tempMin, tempMax) !== "ok";
+  }, [termografoEnFoco, lecturasByTermografo, tempMin, tempMax, viaje.alerta_activa]);
 
   const tempDeCarga = useMemo(() => {
     if (termografosActivos.length === 0) return null;
@@ -2507,6 +2580,21 @@ export function ViajeDetail({
                   new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
               )
               .slice(0, 150);
+          });
+          // El recorrido del mapa no se recorta: acumula todo el viaje.
+          if (row.lat == null || row.lng == null) return;
+          setRecorrido((prev) => {
+            if (prev.some((p) => p.id === row.id)) return prev;
+            const punto: PuntoRecorrido = {
+              id: row.id,
+              termografo_id: row.termografo_id,
+              lat: row.lat as number,
+              lng: row.lng as number,
+              timestamp: row.timestamp,
+            };
+            return [...prev, punto].sort(
+              (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            );
           });
         }
       )
@@ -3492,8 +3580,14 @@ export function ViajeDetail({
             <MapaTracker
               position={position}
               path={path}
-              outOfRange={!!viaje.alerta_activa}
-              title={`Viaje #${String(viaje.numero).padStart(4, "0")}`}
+              outOfRange={fueraDeRangoEnFoco}
+              title={
+                termografoEnFoco
+                  ? `Termógrafo ${termografoEnFoco.id}${
+                      termografoEnFoco.deshabilitado ? " · deshabilitado" : ""
+                    }`
+                  : `Viaje #${String(viaje.numero).padStart(4, "0")}`
+              }
             />
           </div>
           <div className="space-y-3">

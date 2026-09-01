@@ -182,6 +182,20 @@ export interface LecturaTemperatura {
   fuera_rango: boolean;
 }
 
+/**
+ * Punto del recorrido para la polilínea del mapa. Es un subconjunto de
+ * LecturaTemperatura: solo lo necesario para dibujar, porque el mapa trae el
+ * historial COMPLETO del viaje (miles de puntos) y no los últimos 150 como el
+ * resto de la pantalla. Con 4 campos en vez de 15 el payload se mantiene chico.
+ */
+export interface PuntoRecorrido {
+  id: string;
+  termografo_id: string;
+  lat: number;
+  lng: number;
+  timestamp: string;
+}
+
 export interface AlertaLog {
   id: string;
   viaje_id: string;
