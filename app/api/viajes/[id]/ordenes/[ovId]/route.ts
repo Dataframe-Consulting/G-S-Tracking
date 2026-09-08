@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { STATUS_VALUES, STATUS_LABELS, type Status } from "@/lib/types";
 import { logAudit, logAuditMany, STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit";
-import { recalcularRangoViaje } from "@/lib/rangoViaje";
+import { sincronizarRangoViaje } from "@/lib/rangoViaje";
 import { to12h } from "@/lib/time";
 
 const OV_SELECT = `*, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre))`;
@@ -149,7 +149,7 @@ export async function PATCH(
   const fechaCambio =
     (prev?.fecha_carga ?? null) !== (data.fecha_carga ?? null) ||
     (prev?.fecha_entrega ?? null) !== (data.fecha_entrega ?? null);
-  if (fechaCambio) await recalcularRangoViaje(supabase, params.id);
+  if (fechaCambio) await sincronizarRangoViaje(supabase, params.id);
 
   return NextResponse.json({ data });
 }
@@ -182,7 +182,7 @@ export async function DELETE(
 
   // Al irse una carga el rango puede encogerse (era la más temprana o la más
   // tardía del viaje).
-  await recalcularRangoViaje(supabase, params.id);
+  await sincronizarRangoViaje(supabase, params.id);
 
   return NextResponse.json({ ok: true });
 }

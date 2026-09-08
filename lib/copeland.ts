@@ -98,9 +98,37 @@ export function copelandTripId(viajeNumero: number | string, trackerId: string):
   return `${viajeNumero}/${trackerId}`;
 }
 
+// ---------------------------------------------------------------------------
+// Conversión de fechas a UTC
+// ---------------------------------------------------------------------------
+// Copeland: "all API methods with date and time arguments expect UTC values".
+// Nuestras fechas son `date` de Postgres (AAAA-MM-DD) y representan días de la
+// operación, que se rige por Sonora: UTC−7 todo el año, sin horario de verano.
+// Antes se mandaba `${fecha}T00:00:00` pelón, que Copeland leía como medianoche
+// UTC — siete horas antes, y de hecho la tarde del día anterior en Hermosillo.
+
+const OFFSET_SONORA_HORAS = 7;
+
+/** Inicio del día en Sonora, en UTC. 08/09 → "2026-09-08T07:00:00". */
+export function inicioDeDiaUTC(fecha?: string | null): string | null {
+  if (!fecha) return null;
+  const hh = String(OFFSET_SONORA_HORAS).padStart(2, "0");
+  return `${fecha.slice(0, 10)}T${hh}:00:00`;
+}
+
+/** Fin del día en Sonora, en UTC. Cruza al día siguiente: 15/09 → "2026-09-16T06:59:59". */
+export function finDeDiaUTC(fecha?: string | null): string | null {
+  if (!fecha) return null;
+  const d = new Date(`${fecha.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() + 1);
+  const hh = String(OFFSET_SONORA_HORAS - 1).padStart(2, "0");
+  return `${d.toISOString().slice(0, 10)}T${hh}:59:59`;
+}
+
 export async function defineTrip(
   params: DefineTripParams
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; rateLimited?: boolean }> {
   if (process.env.COPELAND_SIMULATE !== "false") return { success: true };
 
   const body = {
@@ -141,7 +169,14 @@ export async function defineTrip(
     }
     const data = JSON.parse(res.body);
     if (data.ErrorCode !== 0) {
-      return { success: false, error: data.ErrorDescription ?? `ErrorCode ${data.ErrorCode}` };
+      // 1011 = "Not enough time has elapsed since previous request". Es rate
+      // limit, no un rechazo del trip: se distingue para que quien llama pueda
+      // reintentar más tarde en vez de darlo por perdido.
+      return {
+        success: false,
+        rateLimited: data.ErrorCode === 1011,
+        error: data.ErrorDescription ?? `ErrorCode ${data.ErrorCode}`,
+      };
     }
     // Copeland puede responder ErrorCode 0 pero rechazar el tracker dentro de
     // TripStatusList (p.ej. 3201 "Cannot change Tracker", 3102 "already assigned").

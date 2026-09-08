@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { defineTrip, closeTrip, copelandTripId } from "@/lib/copeland";
+import { defineTrip, closeTrip, copelandTripId, inicioDeDiaUTC, finDeDiaUTC } from "@/lib/copeland";
 import { logAuditMany } from "@/lib/audit";
 import { cToF } from "@/lib/temperature";
 import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
@@ -144,8 +144,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         trackerId: newTrackerId,
         originName: lugarInicio,
         destinationName: lugarFin,
-        scheduledStartUTC: fechaInicio ? `${fechaInicio}T00:00:00` : null,
-        scheduledEndUTC: fechaFin ? `${fechaFin}T23:59:59` : null,
+        scheduledStartUTC: inicioDeDiaUTC(fechaInicio),
+        scheduledEndUTC: finDeDiaUTC(fechaFin),
       })
         .then((r) => {
           if (!r.success) console.error("DefineTrip rechazado:", r.error);

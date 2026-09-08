@@ -4,7 +4,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { STATUS_LABELS, type Status } from "@/lib/types";
 import { logAuditMany, STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit";
 import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
-import { recalcularRangoViaje } from "@/lib/rangoViaje";
+import { sincronizarRangoViaje } from "@/lib/rangoViaje";
 
 // Cambio 2 — Rechazo de cargas + (opcional) creación de un viaje nuevo para
 // re-rutearlas. Todo en un solo endpoint, diseñado para ser IDEMPOTENTE:
@@ -328,7 +328,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // Ya están todas las cargas del viaje nuevo (copias + cargas nuevas): se
     // deriva su rango. Puede quedar sin fecha_fin si ninguna copia trae entrega
     // todavía, que es lo normal al rechazar — se llena al reagendarla.
-    await recalcularRangoViaje(supabase, nuevoViaje.id);
+    await sincronizarRangoViaje(supabase, nuevoViaje.id);
 
     // Transferir termógrafos seleccionados. Solo reasigna viaje_id; el filtro
     // viaje_id=origen hace que un retry no mueva de más (idempotente). No toca

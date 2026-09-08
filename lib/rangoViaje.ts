@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { defineTrip, copelandTripId, inicioDeDiaUTC, finDeDiaUTC } from "@/lib/copeland";
 
 export type RangoViaje = {
   /** true si el rango realmente cambió de valor y se persistió. */
@@ -97,4 +98,88 @@ export async function recalcularRangoViaje(
       lugar_fin: viaje.lugar_fin as string,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Sincronización con Copeland
+// ---------------------------------------------------------------------------
+
+/**
+ * Debounce en memoria por TripID. Evita encadenar llamadas a DefineTrip cuando
+ * alguien edita varias cargas del mismo viaje en rápida sucesión, que es como
+ * se cae en el rate limit (ErrorCode 1011).
+ *
+ * Es best-effort a propósito: en serverless cada instancia tiene su propio Map,
+ * así que dos ediciones atendidas por instancias distintas no se ven entre sí.
+ * Cubre el caso común (ráfagas del mismo usuario, misma instancia caliente) sin
+ * meter estado persistente. Si Copeland igual responde 1011, no se pierde nada
+ * grave: el trip conserva la ventana anterior y el siguiente cambio de rango
+ * vuelve a intentarlo.
+ */
+const ultimaEmision = new Map<string, number>();
+const DEBOUNCE_MS = 60_000;
+
+/**
+ * Recalcula el rango del viaje y, si cambió, se lo notifica a Copeland.
+ *
+ * Copeland es 1 trip = 1 tracker, así que se reemite un DefineTrip por cada
+ * termógrafo activo del viaje. Reemitir con el mismo TripID ACTUALIZA el trip
+ * existente, no crea uno nuevo:
+ *   "Update an existing trip: pass the same TripID with all original fields
+ *    plus any updated values." — Copeland EDI API v2, Define Trip
+ *
+ * Todo el trato con Copeland es best-effort: si falla, la operación del usuario
+ * ya quedó guardada y no se bloquea.
+ */
+export async function sincronizarRangoViaje(
+  supabase: SupabaseClient,
+  viajeId: string
+): Promise<RangoViaje> {
+  const rango = await recalcularRangoViaje(supabase, viajeId);
+  if (!rango.cambio || !rango.viaje) return rango;
+
+  // Sin termógrafo activo no hay trip que actualizar.
+  const { data: termos } = await supabase
+    .from("termografos")
+    .select("id")
+    .eq("viaje_id", viajeId)
+    .eq("asignado", true)
+    .eq("deshabilitado", false);
+
+  if (!termos?.length) return rango;
+
+  const { numero, lugar_inicio, lugar_fin } = rango.viaje;
+  const ahora = Date.now();
+
+  for (const t of termos) {
+    const trackerId = t.id as string;
+    const tripId = copelandTripId(numero, trackerId);
+
+    const previa = ultimaEmision.get(tripId);
+    if (previa && ahora - previa < DEBOUNCE_MS) continue;
+    ultimaEmision.set(tripId, ahora);
+
+    defineTrip({
+      tripId,
+      trackerId,
+      originName: lugar_inicio,
+      destinationName: lugar_fin,
+      scheduledStartUTC: inicioDeDiaUTC(rango.fecha_inicio),
+      scheduledEndUTC: finDeDiaUTC(rango.fecha_fin),
+    })
+      .then((r) => {
+        if (r.success) return;
+        if (r.rateLimited) {
+          // Rate limit: el trip se queda con la ventana anterior hasta el
+          // siguiente cambio de rango. Se permite reintentar antes del debounce.
+          ultimaEmision.delete(tripId);
+          console.warn(`DefineTrip rate-limited (${tripId}), se reintenta al próximo cambio`);
+          return;
+        }
+        console.error(`DefineTrip rechazado (${tripId}):`, r.error);
+      })
+      .catch((e) => console.error(`DefineTrip error (${tripId}):`, e));
+  }
+
+  return rango;
 }
