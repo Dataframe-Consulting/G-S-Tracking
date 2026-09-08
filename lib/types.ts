@@ -125,8 +125,14 @@ export interface Viaje {
   numero: number;
   lugar_inicio: string;
   lugar_fin: string;
-  fecha_inicio: string;
-  fecha_fin: string;
+  /** Rango operativo del viaje. Derivado de sus cargas cuando fechas_automaticas
+   *  es true: MIN(fecha_carga) y MAX(fecha_entrega). Null mientras el viaje no
+   *  tenga cargas con esas fechas — nunca se inventa una. */
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  /** true = el rango se deriva de las cargas. false = capturado a mano y congelado
+   *  (todos los viajes anteriores a la migración 025). */
+  fechas_automaticas: boolean;
   flete_cargo: string | null;
   termografo_id: string | null;
   responsable_id: string | null;

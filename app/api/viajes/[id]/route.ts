@@ -60,7 +60,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const { data: prev } = await supabase
     .from("viajes")
     .select(
-      "termografo_id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin, flete_cargo, responsable_id, numero, temp_min, temp_max, es_importacion, importacion_estado"
+      "termografo_id, lugar_inicio, lugar_fin, fecha_inicio, fecha_fin, fechas_automaticas, flete_cargo, responsable_id, numero, temp_min, temp_max, es_importacion, importacion_estado"
     )
     .eq("id", params.id)
     .single();
@@ -90,6 +90,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   for (const k of allowed) if (k in body) update[k] = body[k];
   // Si no es importación, se limpia la etapa.
   if (update.es_importacion === false) update.importacion_estado = null;
+
+  // Si el viaje deriva su rango de las cargas, nadie lo pisa por PUT: lo manda
+  // recalcularRangoViaje y punto. Los históricos (fechas_automaticas = false)
+  // sí se pueden seguir corrigiendo a mano.
+  if (prev?.fechas_automaticas) {
+    delete update.fecha_inicio;
+    delete update.fecha_fin;
+  }
 
   const { data, error } = await supabase
     .from("viajes")

@@ -752,7 +752,7 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                     <div>
                       <div className="text-[10px] uppercase tracking-wider text-brand-400 mb-0.5">Fechas</div>
                       <div className="text-brand-700 tabular-nums">
-                        {formatFecha(v.fecha_inicio)} – {formatFecha(v.fecha_fin)}
+                        {formatFecha(v.fecha_inicio) || "—"} – {formatFecha(v.fecha_fin) || "—"}
                       </div>
                     </div>
                     <div>
@@ -882,8 +882,8 @@ export function ViajeTable({ viajes: initialViajes }: { viajes: Viaje[] }) {
                           )}
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell text-brand-600 tabular-nums text-xs">
-                          <div>{formatFecha(v.fecha_inicio)}</div>
-                          <div className="text-brand-400">{formatFecha(v.fecha_fin)}</div>
+                          <div>{formatFecha(v.fecha_inicio) || "—"}</div>
+                          <div className="text-brand-400">{formatFecha(v.fecha_fin) || "—"}</div>
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell">
                           {fleteDe(v) ? (

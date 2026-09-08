@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { STATUS_VALUES } from "@/lib/types";
 import { logAudit } from "@/lib/audit";
+import { recalcularRangoViaje } from "@/lib/rangoViaje";
 
 const OV_SELECT = `*, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre))`;
 
@@ -84,6 +85,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     tipo: "CREACION",
     descripcion: `Creó OV ${data?.ov_ref ?? "(sin ref)"} (${body.cliente})`,
   });
+
+  await recalcularRangoViaje(supabase, params.id);
 
   return NextResponse.json({ data }, { status: 201 });
 }

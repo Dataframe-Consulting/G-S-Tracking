@@ -1598,11 +1598,10 @@ function RechazoModal({
   );
   const [selTermo, setSelTermo] = useState<Set<string>>(() => new Set());
   const [submitting, setSubmitting] = useState(false);
+  // Sin fechas: el rango del viaje nuevo se deriva de las cargas que se le copien.
   const [form, setForm] = useState({
     lugar_inicio: viaje.lugar_inicio,
     lugar_fin: viaje.lugar_fin,
-    fecha_inicio: viaje.fecha_inicio,
-    fecha_fin: viaje.fecha_fin,
   });
   // Overrides por carga (keyed por origen_ov_id). Se completan bajo demanda.
   const [ovOverrides, setOvOverrides] = useState<Record<string, OvOverride>>({});
@@ -1652,7 +1651,7 @@ function RechazoModal({
       return;
     }
     if (crearViaje) {
-      if (!form.lugar_inicio || !form.lugar_fin || !form.fecha_inicio || !form.fecha_fin) {
+      if (!form.lugar_inicio || !form.lugar_fin) {
         toast.error("Completa origen, destino y fechas del viaje nuevo");
         return;
       }
@@ -1696,8 +1695,6 @@ function RechazoModal({
           viaje: {
             lugar_inicio: form.lugar_inicio,
             lugar_fin: form.lugar_fin,
-            fecha_inicio: form.fecha_inicio,
-            fecha_fin: form.fecha_fin,
             flete_cargo: viaje.flete_cargo,
             responsable_id: viaje.responsable_id,
             linea_transportista_id: viaje.linea_transportista_id,
@@ -1835,25 +1832,10 @@ function RechazoModal({
                     inputClassName={fieldCls}
                   />
                 </div>
-                <label className="block text-xs font-medium text-brand-700">
-                  Fecha inicio
-                  <DatePicker
-                    value={form.fecha_inicio}
-                    onChange={(v) => setForm((f) => ({ ...f, fecha_inicio: v }))}
-                    className={`${fieldCls} mt-1`}
-                  />
-                </label>
-                <label className="block text-xs font-medium text-brand-700">
-                  Fecha fin
-                  <DatePicker
-                    value={form.fecha_fin}
-                    onChange={(v) => setForm((f) => ({ ...f, fecha_fin: v }))}
-                    className={`${fieldCls} mt-1`}
-                  />
-                </label>
               </div>
               <div className="text-[11px] text-brand-400">
                 El rango de temperatura y el flete se copian del viaje original (editables luego).
+                Las fechas del viaje nuevo se calculan a partir de las cargas que lleve.
               </div>
 
               {/* Editor por carga: OV/REF nueva, cliente y CEDIS (destino) */}
@@ -2066,11 +2048,10 @@ function RechazoModal({
   );
 }
 
+// Sin fechas: el rango del viaje se deriva de sus cargas y no se edita a mano.
 type ViajeEditData = {
   lugar_inicio: string;
   lugar_fin: string;
-  fecha_inicio: string;
-  fecha_fin: string;
   flete_cargo: string;
   responsable_id: string;
 };
@@ -2108,8 +2089,6 @@ export function ViajeDetail({
   const [viajeEdit, setViajeEdit] = useState<ViajeEditData>({
     lugar_inicio: "",
     lugar_fin: "",
-    fecha_inicio: "",
-    fecha_fin: "",
     flete_cargo: "",
     responsable_id: "",
   });
@@ -2406,8 +2385,6 @@ export function ViajeDetail({
     setViajeEdit({
       lugar_inicio: viaje.lugar_inicio,
       lugar_fin: viaje.lugar_fin,
-      fecha_inicio: viaje.fecha_inicio,
-      fecha_fin: viaje.fecha_fin,
       flete_cargo: viaje.flete_cargo ?? "",
       responsable_id: viaje.responsable_id ?? "",
     });
@@ -2423,8 +2400,6 @@ export function ViajeDetail({
       body: JSON.stringify({
         lugar_inicio: viajeEdit.lugar_inicio,
         lugar_fin: viajeEdit.lugar_fin,
-        fecha_inicio: viajeEdit.fecha_inicio,
-        fecha_fin: viajeEdit.fecha_fin,
         flete_cargo: viajeEdit.flete_cargo || null,
         responsable_id: viajeEdit.responsable_id || null,
       }),
@@ -2438,8 +2413,6 @@ export function ViajeDetail({
         ...prev,
         lugar_inicio: viajeEdit.lugar_inicio,
         lugar_fin: viajeEdit.lugar_fin,
-        fecha_inicio: viajeEdit.fecha_inicio,
-        fecha_fin: viajeEdit.fecha_fin,
         flete_cargo: viajeEdit.flete_cargo || null,
         responsable_id: viajeEdit.responsable_id || null,
         responsable: newResponsable,
@@ -3383,31 +3356,17 @@ export function ViajeDetail({
             </div>
           </div>
 
-          {editingViaje ? (
-            <EditCell label="Fecha de inicio">
-              <DatePicker
-                required
-                value={viajeEdit.fecha_inicio}
-                onChange={(v) => setViajeEdit((prev) => ({ ...prev, fecha_inicio: v }))}
-                className={bareInput}
-              />
-            </EditCell>
-          ) : (
-            <InfoCell label="Fecha de inicio" value={formatFecha(viaje.fecha_inicio)} />
-          )}
-
-          {editingViaje ? (
-            <EditCell label="Fecha de fin">
-              <DatePicker
-                required
-                value={viajeEdit.fecha_fin}
-                onChange={(v) => setViajeEdit((prev) => ({ ...prev, fecha_fin: v }))}
-                className={bareInput}
-              />
-            </EditCell>
-          ) : (
-            <InfoCell label="Fecha de fin" value={formatFecha(viaje.fecha_fin)} />
-          )}
+          {/* Derivadas de las cargas, no editables: fecha_inicio = MIN(fecha de
+              carga) y fecha_fin = MAX(fecha de entrega). Los viajes anteriores a
+              la migracion 025 conservan lo que se capturo a mano. */}
+          <InfoCell
+            label="Fecha de inicio"
+            value={formatFecha(viaje.fecha_inicio) || (viaje.fechas_automaticas ? "Sin cargas todavía" : "—")}
+          />
+          <InfoCell
+            label="Fecha de fin"
+            value={formatFecha(viaje.fecha_fin) || (viaje.fechas_automaticas ? "Sin fecha de entrega" : "—")}
+          />
 
           {/* Responsable */}
           {editingViaje ? (

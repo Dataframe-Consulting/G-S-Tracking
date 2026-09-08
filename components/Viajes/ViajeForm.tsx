@@ -42,8 +42,6 @@ export function ViajeForm({
   const [form, setForm] = useState({
     lugar_inicio: "",
     lugar_fin: "",
-    fecha_inicio: today,
-    fecha_fin: today,
     flete_cargo: "",
     responsable_id: "",
     es_importacion: false,
@@ -64,8 +62,6 @@ export function ViajeForm({
       body: JSON.stringify({
         lugar_inicio: form.lugar_inicio,
         lugar_fin: form.lugar_fin,
-        fecha_inicio: form.fecha_inicio,
-        fecha_fin: form.fecha_fin,
         flete_cargo: form.flete_cargo || null,
         responsable_id: form.responsable_id || null,
         es_importacion: form.es_importacion,
@@ -110,24 +106,11 @@ export function ViajeForm({
             inputClassName={fieldInput}
           />
         </label>
-        <label className="block text-sm font-medium text-brand-700">
-          Fecha de inicio
-          <DatePicker
-            required
-            value={form.fecha_inicio}
-            onChange={(v) => update("fecha_inicio", v)}
-            className={field}
-          />
-        </label>
-        <label className="block text-sm font-medium text-brand-700">
-          Fecha de fin
-          <DatePicker
-            required
-            value={form.fecha_fin}
-            onChange={(v) => update("fecha_fin", v)}
-            className={field}
-          />
-        </label>
+        <p className="text-xs text-brand-500 lg:col-span-4 -mt-1">
+          Las fechas del viaje se calculan solas a partir de sus cargas: el inicio
+          es la fecha de carga más temprana y el fin la fecha de entrega más lejana.
+          Aparecerán en cuanto agregues la primera carga.
+        </p>
       </div>
 
       <SectionTitle>Transporte y responsable</SectionTitle>

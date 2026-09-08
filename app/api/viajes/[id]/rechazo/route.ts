@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { STATUS_LABELS, type Status } from "@/lib/types";
 import { logAuditMany, STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit";
 import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
+import { recalcularRangoViaje } from "@/lib/rangoViaje";
 
 // Cambio 2 — Rechazo de cargas + (opcional) creación de un viaje nuevo para
 // re-rutearlas. Todo en un solo endpoint, diseñado para ser IDEMPOTENTE:
@@ -127,7 +128,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "Falta nuevo_viaje_id" }, { status: 400 });
     }
     const v = body.viaje ?? {};
-    for (const k of ["lugar_inicio", "lugar_fin", "fecha_inicio", "fecha_fin"]) {
+    // Las fechas ya no se piden: el rango del viaje nuevo se deriva de sus cargas.
+    for (const k of ["lugar_inicio", "lugar_fin"]) {
       if (!v[k]) return NextResponse.json({ error: `Falta viaje.${k}` }, { status: 400 });
     }
 
@@ -195,8 +197,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           origen_viaje_id: params.id,
           lugar_inicio: v.lugar_inicio,
           lugar_fin: v.lugar_fin,
-          fecha_inicio: v.fecha_inicio,
-          fecha_fin: v.fecha_fin,
+          // El rango NO se hereda del viaje origen: se deriva de las cargas que
+          // se le copien, más abajo. Heredarlo traía las fechas de un viaje que
+          // ya no corresponde a esta carga.
+          fecha_inicio: null,
+          fecha_fin: null,
+          fechas_automaticas: true,
           flete_cargo: v.flete_cargo ?? null,
           responsable_id: v.responsable_id ?? null,
           linea_transportista_id: v.linea_transportista_id ?? null,
@@ -318,6 +324,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         }
       }
     }
+
+    // Ya están todas las cargas del viaje nuevo (copias + cargas nuevas): se
+    // deriva su rango. Puede quedar sin fecha_fin si ninguna copia trae entrega
+    // todavía, que es lo normal al rechazar — se llena al reagendarla.
+    await recalcularRangoViaje(supabase, nuevoViaje.id);
 
     // Transferir termógrafos seleccionados. Solo reasigna viaje_id; el filtro
     // viaje_id=origen hace que un retry no mueva de más (idempotente). No toca

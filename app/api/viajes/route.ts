@@ -25,7 +25,9 @@ export async function POST(req: Request) {
   const supabase = createServerSupabase();
   const body = await req.json();
 
-  const required = ["lugar_inicio", "lugar_fin", "fecha_inicio", "fecha_fin"];
+  // Las fechas ya no se capturan: el rango se deriva de las cargas del viaje
+  // (MIN fecha_carga / MAX fecha_entrega) conforme se van agregando.
+  const required = ["lugar_inicio", "lugar_fin"];
   for (const k of required) {
     if (!body[k]) return NextResponse.json({ error: `Falta ${k}` }, { status: 400 });
   }
@@ -33,8 +35,10 @@ export async function POST(req: Request) {
   const payload = {
     lugar_inicio: body.lugar_inicio,
     lugar_fin: body.lugar_fin,
-    fecha_inicio: body.fecha_inicio,
-    fecha_fin: body.fecha_fin,
+    // Nace sin rango y en modo automático: lo gana al agregar la primera carga.
+    fecha_inicio: null,
+    fecha_fin: null,
+    fechas_automaticas: true,
     flete_cargo: body.flete_cargo ?? null,
     termografo_id: body.termografo_id ?? null,
     responsable_id: body.responsable_id ?? null,
