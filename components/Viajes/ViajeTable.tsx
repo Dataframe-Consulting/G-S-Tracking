@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { Viaje, OrdenVenta } from "@/lib/types";
-import { STATUS_LABELS, STATUS_CLASSES, STATUS_DOT_CLASSES, tieneRechazoParcial } from "@/lib/types";
+import { STATUS_LABELS, STATUS_CLASSES, STATUS_DOT_CLASSES, tieneRechazoParcial, totalCajasRechazadas } from "@/lib/types";
 import { TempIndicator } from "@/components/Cargas/TempIndicator";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { formatFecha } from "@/lib/fecha";
@@ -235,6 +235,11 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                           .join(", ")
                       : "—"}
                   </div>
+                  {totalCajasRechazadas(ov.productos) > 0 && (
+                    <div className="text-xs font-medium text-red-600">
+                      {totalCajasRechazadas(ov.productos)} cj rechazadas
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -273,6 +278,11 @@ function OVsModal({ viaje, onClose }: { viaje: Viaje; onClose: () => void }) {
                               {p.producto?.nombre ?? "—"}
                               {p.cajas != null && (
                                 <span className="text-brand-400"> · {p.cajas} cj</span>
+                              )}
+                              {(p.cajas_rechazadas ?? 0) > 0 && (
+                                <span className="font-medium text-red-600">
+                                  {" "}· {p.cajas_rechazadas} rech.
+                                </span>
                               )}
                             </span>
                           ))}
