@@ -311,7 +311,9 @@ function OVFormPanel({
       cedi: form.cedi || null,
       fecha_carga: form.fecha_carga,
       lugar_carga: form.lugar_carga,
-      fecha_entrega: form.tiene_cita ? form.fecha_entrega || null : null,
+      // La fecha de entrega es dato principal de la carga: ya no depende del
+      // toggle de cita. Alimenta fecha_fin del viaje (MAX de las entregas).
+      fecha_entrega: form.fecha_entrega || null,
       cita: form.tiene_cita ? form.cita || null : null,
       tiene_cita: form.tiene_cita,
       po: form.tiene_cita ? form.po || null : null,
@@ -422,6 +424,15 @@ function OVFormPanel({
             className={`${fieldCls} mt-1`}
           />
         </label>
+        <label className="block text-xs font-medium text-brand-700">
+          Fecha de entrega *
+          <DatePicker
+            required
+            value={form.fecha_entrega}
+            onChange={(v) => upd("fecha_entrega", v)}
+            className={`${fieldCls} mt-1`}
+          />
+        </label>
         <div className="block text-xs font-medium text-brand-700">
           Lugar de carga *
           {lugaresCarga.length > 0 ? (
@@ -516,14 +527,6 @@ function OVFormPanel({
                 type="text"
                 value={form.folio_cita}
                 onChange={(e) => upd("folio_cita", e.target.value)}
-                className={`${fieldCls} mt-1`}
-              />
-            </label>
-            <label className="block text-xs font-medium text-brand-700">
-              Fecha de la cita
-              <DatePicker
-                value={form.fecha_entrega}
-                onChange={(v) => upd("fecha_entrega", v)}
                 className={`${fieldCls} mt-1`}
               />
             </label>
@@ -651,7 +654,8 @@ function OVDetailModal({
       cedi: form.cedi || null,
       fecha_carga: form.fecha_carga,
       lugar_carga: form.lugar_carga,
-      fecha_entrega: form.tiene_cita ? form.fecha_entrega || null : null,
+      // Dato principal de la carga, independiente del toggle de cita.
+      fecha_entrega: form.fecha_entrega || null,
       cita: form.tiene_cita ? form.cita || null : null,
       tiene_cita: form.tiene_cita,
       po: form.tiene_cita ? form.po || null : null,
@@ -775,7 +779,16 @@ function OVDetailModal({
                     className={`${fieldCls} mt-1`}
                   />
                 </label>
-                <label className="block text-xs font-medium text-brand-700 sm:col-span-2">
+                <label className="block text-xs font-medium text-brand-700">
+                  Fecha de entrega *
+                  <DatePicker
+                    required
+                    value={form.fecha_entrega}
+                    onChange={(v) => upd("fecha_entrega", v)}
+                    className={`${fieldCls} mt-1`}
+                  />
+                </label>
+                <label className="block text-xs font-medium text-brand-700">
                   Lugar de carga *
                   <input
                     type="text"
@@ -834,14 +847,6 @@ function OVDetailModal({
                         type="text"
                         value={form.folio_cita}
                         onChange={(e) => upd("folio_cita", e.target.value)}
-                        className={`${fieldCls} mt-1`}
-                      />
-                    </label>
-                    <label className="block text-xs font-medium text-brand-700">
-                      Fecha de la cita
-                      <DatePicker
-                        value={form.fecha_entrega}
-                        onChange={(v) => upd("fecha_entrega", v)}
                         className={`${fieldCls} mt-1`}
                       />
                     </label>
@@ -917,21 +922,19 @@ function OVDetailModal({
                   <div className="text-xs text-brand-500 mt-0.5">{ov.lugar_carga}</div>
                 </div>
                 <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">Cita</div>
-                  {ov.tiene_cita ? (
-                    <div className="space-y-0.5">
-                      {ov.fecha_entrega && (
-                        <div className="text-sm font-medium text-brand-900">
-                          {formatFecha(ov.fecha_entrega)}{ov.cita ? ` · ${to12h(ov.cita)}` : ""}
-                        </div>
-                      )}
-                      {ov.po && <div className="text-xs text-brand-500">PO: {ov.po}</div>}
-                      {ov.folio_cita && <div className="text-xs text-brand-500">Folio: {ov.folio_cita}</div>}
-                      {ov.factura_gys && <div className="text-xs text-brand-500">Factura GyS: {ov.factura_gys}</div>}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-brand-400">Sin cita</div>
-                  )}
+                  <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">Entrega</div>
+                  <div className="space-y-0.5">
+                    {ov.fecha_entrega ? (
+                      <div className="text-sm font-medium text-brand-900">
+                        {formatFecha(ov.fecha_entrega)}{ov.cita ? ` · ${to12h(ov.cita)}` : ""}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-brand-400">Sin fecha de entrega</div>
+                    )}
+                    {ov.tiene_cita && ov.po && <div className="text-xs text-brand-500">PO: {ov.po}</div>}
+                    {ov.tiene_cita && ov.folio_cita && <div className="text-xs text-brand-500">Folio: {ov.folio_cita}</div>}
+                    {ov.tiene_cita && ov.factura_gys && <div className="text-xs text-brand-500">Factura GyS: {ov.factura_gys}</div>}
+                  </div>
                 </div>
               </div>
 
@@ -1339,8 +1342,12 @@ function DatosViajeModal({
 const REJECTABLE_STATUSES: Status[] = ["PENDIENTE", "EN_PREPARACION", "TRANSITO"];
 
 // Override por carga para la copia en el viaje nuevo (Cambio 2): OV/REF nueva,
-// cliente y CEDIS (destino). Los demás campos se heredan de la carga original.
-type OvOverride = { ov_ref: string; cliente: string; cedi: string };
+// cliente, CEDIS (destino) y fecha de entrega. Los demás campos se heredan de la
+// carga original.
+// La fecha de entrega es OPCIONAL aquí a propósito: al rechazar, la entrega se
+// reagenda y normalmente aún no se conoce la fecha nueva. Obligarla llevaría al
+// usuario a inventar una, que es justo lo que este cambio busca evitar.
+type OvOverride = { ov_ref: string; cliente: string; cedi: string; fecha_entrega: string };
 
 // Editor de una carga NUEVA (creada desde cero) para el viaje nuevo del rechazo.
 // Usa el mismo set de datos que una OV normal (OVFormData) y es repetible.
@@ -1445,6 +1452,14 @@ function NuevaCargaCard({
             className={`${fieldCls} mt-1`}
           />
         </label>
+        <label className="block text-xs font-medium text-brand-700">
+          Fecha de entrega
+          <DatePicker
+            value={form.fecha_entrega}
+            onChange={(v) => upd("fecha_entrega", v)}
+            className={`${fieldCls} mt-1`}
+          />
+        </label>
         <div className="block text-xs font-medium text-brand-700">
           Lugar de carga *
           {lugares.length > 0 ? (
@@ -1528,10 +1543,6 @@ function NuevaCargaCard({
               <input type="text" value={form.folio_cita} onChange={(e) => upd("folio_cita", e.target.value)} className={`${fieldCls} mt-1`} />
             </label>
             <label className="block text-xs font-medium text-brand-700">
-              Fecha de la cita
-              <DatePicker value={form.fecha_entrega} onChange={(v) => upd("fecha_entrega", v)} className={`${fieldCls} mt-1`} />
-            </label>
-            <label className="block text-xs font-medium text-brand-700">
               Hora de la cita
               <input
                 type="time"
@@ -1602,7 +1613,9 @@ function RechazoModal({
   // Default de una carga: OV/REF vacía (se captura nueva), cliente/CEDIS heredados.
   function defaultOverride(id: string): OvOverride {
     const orig = ordenes.find((o) => o.id === id);
-    return { ov_ref: "", cliente: orig?.cliente ?? "", cedi: orig?.cedi ?? "" };
+    // fecha_entrega arranca vacía (no se hereda): la cita del viaje original ya
+    // no aplica para la copia.
+    return { ov_ref: "", cliente: orig?.cliente ?? "", cedi: orig?.cedi ?? "", fecha_entrega: "" };
   }
   function getOverride(id: string): OvOverride {
     return ovOverrides[id] ?? defaultOverride(id);
@@ -1701,6 +1714,7 @@ function RechazoModal({
               ov_ref: ovr.ov_ref.trim() || null,
               cliente: ovr.cliente || undefined,
               cedi: ovr.cedi || null,
+              fecha_entrega: ovr.fecha_entrega || null,
             };
           }),
           // Cargas nuevas creadas desde cero para el viaje nuevo.
@@ -1710,7 +1724,7 @@ function RechazoModal({
             cedi: n.cedi || null,
             fecha_carga: n.fecha_carga,
             lugar_carga: n.lugar_carga,
-            fecha_entrega: n.tiene_cita ? n.fecha_entrega || null : null,
+            fecha_entrega: n.fecha_entrega || null,
             cita: n.tiene_cita ? n.cita || null : null,
             tiene_cita: n.tiene_cita,
             po: n.tiene_cita ? n.po || null : null,
@@ -1898,6 +1912,17 @@ function RechazoModal({
                             </select>
                           </label>
                         )}
+                        <label className="block text-xs font-medium text-brand-700">
+                          Fecha de entrega
+                          <DatePicker
+                            value={ovr.fecha_entrega}
+                            onChange={(v) => setOverride(id, { fecha_entrega: v })}
+                            className={`${fieldCls} mt-1`}
+                          />
+                          <span className="mt-1 block font-normal text-[11px] text-brand-400">
+                            Opcional: captúrala cuando se reagende la entrega.
+                          </span>
+                        </label>
                       </div>
                     </div>
                   );
@@ -3185,8 +3210,8 @@ export function ViajeDetail({
                         {formatFecha(ov.fecha_carga)} · {ov.lugar_carga}
                       </div>
                       <div className="text-xs text-brand-600">
-                        <span className="text-brand-400">Cita: </span>
-                        {ov.tiene_cita && ov.fecha_entrega
+                        <span className="text-brand-400">Entrega: </span>
+                        {ov.fecha_entrega
                           ? `${formatFecha(ov.fecha_entrega)}${ov.cita ? ` · ${to12h(ov.cita)}` : ""}`
                           : "—"}
                         {ov.cedi ? ` · ${ov.cedi}` : ""}
@@ -3253,7 +3278,7 @@ export function ViajeDetail({
                             <div className="text-brand-400">{ov.lugar_carga}</div>
                           </td>
                           <td className="px-4 py-3 hidden md:table-cell text-brand-600 text-xs">
-                            {ov.tiene_cita && ov.fecha_entrega ? (
+                            {ov.fecha_entrega ? (
                               <div>
                                 {formatFecha(ov.fecha_entrega)}
                                 {ov.cita ? ` · ${to12h(ov.cita)}` : ""}

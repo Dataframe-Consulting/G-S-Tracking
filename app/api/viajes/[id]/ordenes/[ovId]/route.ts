@@ -12,7 +12,7 @@ const OV_FIELD_LABELS: Record<string, string> = {
   cedi: "cedi",
   fecha_carga: "fecha de carga",
   lugar_carga: "lugar de carga",
-  fecha_entrega: "fecha de la cita",
+  fecha_entrega: "fecha de entrega",
   lugar_entrega: "lugar de entrega",
   cita: "hora de la cita",
   po: "PO",

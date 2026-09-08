@@ -28,7 +28,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const supabase = createServerSupabase();
   const body = await req.json();
 
-  const required = ["cliente", "fecha_carga", "lugar_carga"];
+  // fecha_entrega es obligatoria al dar de alta una carga: alimenta fecha_fin del
+  // viaje (MAX de las entregas). Las copias que genera un rechazo NO pasan por
+  // aquí — se insertan directo en rechazo/route.ts, donde sí puede faltar porque
+  // la entrega se está reagendando.
+  const required = ["cliente", "fecha_carga", "lugar_carga", "fecha_entrega"];
   for (const k of required) {
     if (!body[k]) return NextResponse.json({ error: `Falta ${k}` }, { status: 400 });
   }
