@@ -37,7 +37,7 @@ export default async function ViajesPage({
       *,
       responsable:user_profiles!responsable_id(id, nombre, email),
       linea:lineas_transportista!linea_transportista_id ( id, nombre, concesionario:concesionarios!concesionario_id ( id, nombre ) ),
-      ordenes_venta ( id, ov_ref, cliente, cedi, status, fecha_entrega, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre)) )
+      ordenes_venta ( id, ov_ref, cliente, cedi, status, fecha_entrega, productos:orden_productos(id, producto_id, cajas, cajas_rechazadas, producto:productos(id, nombre)) )
     `)
     .order("numero", { ascending: false });
 

@@ -5,7 +5,7 @@ import { logAudit, logAuditMany, STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit"
 import { sincronizarRangoViaje } from "@/lib/rangoViaje";
 import { to12h } from "@/lib/time";
 
-const OV_SELECT = `*, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre))`;
+const OV_SELECT = `*, productos:orden_productos(id, producto_id, cajas, cajas_rechazadas, producto:productos(id, nombre))`;
 
 const OV_FIELD_LABELS: Record<string, string> = {
   ov_ref: "OV/REF",

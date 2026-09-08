@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -18,7 +19,7 @@ import type {
   Termografo,
   Viaje,
 } from "@/lib/types";
-import { STATUS_LABELS, STATUS_VALUES, IMPORTACION_ESTADOS, IMPORTACION_LABELS } from "@/lib/types";
+import { STATUS_LABELS, STATUS_VALUES, IMPORTACION_ESTADOS, IMPORTACION_LABELS, cajasAceptadas, totalCajasRechazadas } from "@/lib/types";
 import { StatusBadge } from "@/components/Cargas/StatusBadge";
 import { TempGauge } from "@/components/Temperatura/TempGauge";
 import { TempChart } from "@/components/Temperatura/TempChart";
@@ -579,6 +580,7 @@ function OVDetailModal({
   productos,
   clientes,
   initialEditing = false,
+  reruteo,
   onClose,
   onSaved,
   onDelete,
@@ -588,6 +590,8 @@ function OVDetailModal({
   productos: Producto[];
   clientes: ClienteConCedis[];
   initialEditing?: boolean;
+  /** Viaje al que se re-ruteó lo rechazado de esta carga, si hubo. */
+  reruteo?: { id: string; numero: number } | null;
   onClose: () => void;
   onSaved: (ov: OrdenVenta) => void;
   onDelete: (ov: OrdenVenta) => void;
@@ -945,13 +949,38 @@ function OVDetailModal({
                 </div>
                 {ovProductos.length > 0 ? (
                   <div className="space-y-1.5">
+                    {totalCajasRechazadas(ovProductos) > 0 && (
+                      <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs">
+                        <span className="font-semibold text-red-700">
+                          {totalCajasRechazadas(ovProductos)} cj rechazadas
+                        </span>
+                        {reruteo && (
+                          <>
+                            <span className="text-red-400">→</span>
+                            <Link
+                              href={`/viajes/${reruteo.id}`}
+                              className="font-semibold text-red-700 underline underline-offset-2 hover:text-red-900"
+                            >
+                              viaje #{String(reruteo.numero).padStart(4, "0")}
+                            </Link>
+                          </>
+                        )}
+                      </div>
+                    )}
                     {ovProductos.map((p) => (
                       <div key={p.id} className="flex items-center justify-between rounded-lg bg-white border border-brand-100 px-3 py-2">
                         <div className="text-sm font-medium text-brand-900 truncate">
                           {p.producto?.nombre ?? "—"}
                         </div>
                         {p.cajas != null && (
-                          <div className="text-sm font-bold text-brand-700 ml-2 shrink-0">{p.cajas} cj</div>
+                          <div className="ml-2 shrink-0 text-right">
+                            <div className="text-sm font-bold text-brand-700">{p.cajas} cj</div>
+                            {(p.cajas_rechazadas ?? 0) > 0 && (
+                              <div className="text-[11px] font-medium text-red-600">
+                                {p.cajas_rechazadas} rechazadas · {cajasAceptadas(p)} aceptadas
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}
@@ -1605,6 +1634,32 @@ function RechazoModal({
   });
   // Overrides por carga (keyed por origen_ov_id). Se completan bajo demanda.
   const [ovOverrides, setOvOverrides] = useState<Record<string, OvOverride>>({});
+  // Rechazo parcial (migración 026). Una carga aquí rechaza solo parte de sus
+  // cajas: conserva su status y sus cajas cargadas, y se le anota lo rechazado
+  // por línea de producto. Ausente = rechazo de la carga completa.
+  //   { [ov_id]: { [orden_producto_id]: cajas_rechazadas } }
+  const [parciales, setParciales] = useState<Record<string, Record<string, number>>>({});
+
+  function esParcial(ovId: string) {
+    return parciales[ovId] != null;
+  }
+  function setTipoRechazo(ovId: string, parcial: boolean) {
+    setParciales((prev) => {
+      const n = { ...prev };
+      if (!parcial) delete n[ovId];
+      else if (!n[ovId]) n[ovId] = {};
+      return n;
+    });
+  }
+  function setCajasRechazadas(ovId: string, lineaId: string, valor: string) {
+    setParciales((prev) => ({
+      ...prev,
+      [ovId]: { ...(prev[ovId] ?? {}), [lineaId]: valor === "" ? 0 : Number(valor) },
+    }));
+  }
+  function totalRechazado(ovId: string) {
+    return Object.values(parciales[ovId] ?? {}).reduce((n, c) => n + (Number(c) || 0), 0);
+  }
   // Cargas NUEVAS (creadas desde cero) que se agregan al viaje nuevo.
   const [cargasNuevas, setCargasNuevas] = useState<OVFormData[]>([]);
   const hoy = new Date().toISOString().slice(0, 10);
@@ -1646,6 +1701,26 @@ function RechazoModal({
   const warnSinTermografo = cargasQuedanActivas && seLlevaTodos;
 
   async function submit(crearViaje: boolean) {
+    // Rechazo parcial: al menos una caja, y nunca más de las cargadas.
+    for (const ovId of selOv) {
+      if (!esParcial(ovId)) continue;
+      const carga = rechazables.find((o) => o.id === ovId);
+      const lineas = carga?.productos ?? [];
+      for (const l of lineas) {
+        const pedido = parciales[ovId]?.[l.id] ?? 0;
+        if (pedido > (l.cajas ?? 0)) {
+          toast.error(
+            `${carga?.ov_ref ?? "La carga"}: no puedes rechazar ${pedido} cajas de ${l.producto?.nombre ?? "ese producto"}, solo hay ${l.cajas ?? 0}.`
+          );
+          return;
+        }
+      }
+      if (totalRechazado(ovId) <= 0) {
+        toast.error(`${carga?.ov_ref ?? "La carga"}: captura cuántas cajas se rechazan.`);
+        return;
+      }
+    }
+
     if (selOv.size === 0) {
       toast.error("Selecciona al menos una carga");
       return;
@@ -1703,6 +1778,9 @@ function RechazoModal({
             temp_rango_id: viaje.temp_rango_id ?? null,
           },
           termografo_ids: Array.from(selTermo),
+          // Detalle de los rechazos parciales: { ov_id: { linea_id: cajas } }.
+          // Las cargas que no aparecen aquí son rechazo total.
+          parciales,
           // Datos capturados por carga para la copia (OV/REF nueva, cliente, CEDIS).
           ovs: Array.from(selOv).map((id) => {
             const ovr = getOverride(id);
@@ -1732,7 +1810,7 @@ function RechazoModal({
             productos: rowsToPayload(n.productos),
           })),
         }
-      : { ov_ids: Array.from(selOv), crear_viaje: false };
+      : { ov_ids: Array.from(selOv), crear_viaje: false, parciales };
 
     const res = await fetch(`/api/viajes/${viaje.id}/rechazo`, {
       method: "POST",
@@ -1777,30 +1855,114 @@ function RechazoModal({
                   No hay cargas rechazables (todas están entregadas o ya rechazadas).
                 </div>
               ) : (
-                rechazables.map((o) => (
-                  <label
-                    key={o.id}
-                    className="flex items-center gap-3 rounded-xl border border-brand-200 px-4 py-3 cursor-pointer hover:bg-brand-50 transition"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selOv.has(o.id)}
-                      onChange={() => toggle(setSelOv, o.id)}
-                      className="h-4 w-4 rounded border-brand-300 text-red-600 focus:ring-red-500"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">
-                          {o.ov_ref || "—"}
-                        </span>
-                        <StatusBadge status={o.status} />
-                      </div>
-                      <div className="text-sm font-medium text-brand-900 mt-0.5 truncate">
-                        {o.cliente}
-                      </div>
+                rechazables.map((o) => {
+                  const sel = selOv.has(o.id);
+                  const parcial = esParcial(o.id);
+                  const lineas = o.productos ?? [];
+                  return (
+                    <div
+                      key={o.id}
+                      className={`rounded-xl border transition ${
+                        sel ? "border-red-200 bg-red-50/40" : "border-brand-200"
+                      }`}
+                    >
+                      <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={sel}
+                          onChange={() => toggle(setSelOv, o.id)}
+                          className="h-4 w-4 rounded border-brand-300 text-red-600 focus:ring-red-500"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">
+                              {o.ov_ref || "—"}
+                            </span>
+                            <StatusBadge status={o.status} />
+                          </div>
+                          <div className="text-sm font-medium text-brand-900 mt-0.5 truncate">
+                            {o.cliente}
+                          </div>
+                        </div>
+                      </label>
+
+                      {sel && (
+                        <div className="border-t border-red-100 px-4 py-3 space-y-3">
+                          {/* Total vs parcial */}
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              { v: false, label: "Rechazar todo" },
+                              { v: true, label: "Rechazo parcial" },
+                            ].map((op) => (
+                              <button
+                                key={String(op.v)}
+                                type="button"
+                                onClick={() => setTipoRechazo(o.id, op.v)}
+                                className={
+                                  parcial === op.v
+                                    ? "rounded-lg bg-brand-900 px-3 py-1.5 text-xs font-semibold text-white"
+                                    : "rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 transition"
+                                }
+                              >
+                                {op.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Productos: siempre visibles. Cajas editables solo en parcial. */}
+                          {lineas.length === 0 ? (
+                            <div className="text-xs text-brand-400">Esta carga no tiene productos.</div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {lineas.map((l) => {
+                                const max = l.cajas ?? 0;
+                                const val = parciales[o.id]?.[l.id];
+                                const excede = parcial && (val ?? 0) > max;
+                                return (
+                                  <div key={l.id} className="flex items-center gap-2 text-xs">
+                                    <span className="flex-1 truncate text-brand-800">
+                                      {l.producto?.nombre ?? "—"}
+                                    </span>
+                                    {parcial ? (
+                                      <>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={max || undefined}
+                                          value={val ?? ""}
+                                          onChange={(e) => setCajasRechazadas(o.id, l.id, e.target.value)}
+                                          placeholder="0"
+                                          className={`w-20 rounded-lg border px-2 py-1 text-right tabular-nums ${
+                                            excede ? "border-red-400 bg-red-50" : "border-brand-200"
+                                          }`}
+                                        />
+                                        <span className="w-24 shrink-0 text-brand-400 tabular-nums">
+                                          de {max} cj
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-brand-500 tabular-nums">
+                                        {l.cajas ?? "—"} cj
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {parcial && (
+                            <div className="text-xs text-brand-500">
+                              Se rechazan <b className="text-brand-800">{totalRechazado(o.id)}</b> cajas.
+                              La carga conserva su status y sus cajas cargadas; lo rechazado queda
+                              anotado y, si creas viaje, se va en la copia.
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </label>
-                ))
+                  );
+                })
               )}
             </>
           )}
@@ -2063,6 +2225,7 @@ export function ViajeDetail({
   alertas,
   termografos: initialTermografos,
   auditoria,
+  reruteos = {},
   role,
 }: {
   viaje: Viaje;
@@ -2071,6 +2234,8 @@ export function ViajeDetail({
   alertas: AlertaLog[];
   termografos: Termografo[];
   auditoria: Auditoria[];
+  /** ov_id → viaje al que se re-ruteó lo rechazado de esa carga. */
+  reruteos?: Record<string, { id: string; numero: number }>;
   role: string;
 }) {
   const router = useRouter();
@@ -3034,6 +3199,7 @@ export function ViajeDetail({
           productos={productos}
           clientes={clientes}
           initialEditing={detailOVEdit}
+          reruteo={reruteos[detailOV.id] ?? null}
           onClose={() => setDetailOV(null)}
           onSaved={(updated) => {
             setOrdenes((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));

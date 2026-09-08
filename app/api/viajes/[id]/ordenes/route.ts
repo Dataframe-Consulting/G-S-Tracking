@@ -4,7 +4,7 @@ import { STATUS_VALUES } from "@/lib/types";
 import { logAudit } from "@/lib/audit";
 import { sincronizarRangoViaje } from "@/lib/rangoViaje";
 
-const OV_SELECT = `*, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre))`;
+const OV_SELECT = `*, productos:orden_productos(id, producto_id, cajas, cajas_rechazadas, producto:productos(id, nombre))`;
 
 // Productos del body (Fase 5): [{ producto_id, cajas }]. Filtra los válidos.
 type ProductoInput = { producto_id?: string; cajas?: number | null };

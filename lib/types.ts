@@ -87,8 +87,27 @@ export interface OrdenProducto {
   id: string;
   orden_id?: string;
   producto_id: string | null;
+  /** Cajas cargadas. No se descuenta al rechazar: se registra aparte. */
   cajas: number | null;
+  /** Cajas rechazadas de esta línea (migración 026). null/0 = ninguna. */
+  cajas_rechazadas?: number | null;
   producto?: { id: string; nombre: string } | null;
+}
+
+/** Cajas que el cliente sí recibió de una línea. */
+export function cajasAceptadas(p: OrdenProducto): number | null {
+  if (p.cajas == null) return null;
+  return p.cajas - (p.cajas_rechazadas ?? 0);
+}
+
+/** true si a la carga le rechazaron algo, sin importar su status. */
+export function tieneRechazoParcial(productos?: OrdenProducto[]): boolean {
+  return (productos ?? []).some((p) => (p.cajas_rechazadas ?? 0) > 0);
+}
+
+/** Total de cajas rechazadas de una carga. */
+export function totalCajasRechazadas(productos?: OrdenProducto[]): number {
+  return (productos ?? []).reduce((n, p) => n + (p.cajas_rechazadas ?? 0), 0);
 }
 
 export interface OrdenVenta {
@@ -112,6 +131,8 @@ export interface OrdenVenta {
   updated_at: string;
   /** Productos de la OV (Fase 5). Reemplaza producto/combo + cajas/cajas_b. */
   productos?: OrdenProducto[];
+  /** Carga de la que salió esta copia al re-rutear un rechazo (migración 026). */
+  origen_ov_id?: string | null;
 }
 
 export interface Responsable {

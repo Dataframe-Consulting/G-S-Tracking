@@ -18,11 +18,32 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
 
   const { data: viaje } = await supabase
     .from("viajes")
-    .select(`*, responsable:user_profiles!responsable_id(id, nombre, email), linea:lineas_transportista!linea_transportista_id ( id, nombre, concesionario:concesionarios!concesionario_id ( id, nombre ) ), ordenes_venta ( *, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre)) )`)
+    .select(`*, responsable:user_profiles!responsable_id(id, nombre, email), linea:lineas_transportista!linea_transportista_id ( id, nombre, concesionario:concesionarios!concesionario_id ( id, nombre ) ), ordenes_venta ( *, productos:orden_productos(id, producto_id, cajas, cajas_rechazadas, producto:productos(id, nombre)) )`)
     .eq("id", params.id)
     .maybeSingle();
 
   if (!viaje) notFound();
+
+  // Re-ruteos: a qué viaje se fue lo rechazado de cada carga. La copia guarda
+  // origen_ov_id (migración 026), así que se resuelve de un tiro para todas.
+  const ovIds = (viaje.ordenes_venta ?? []).map((o: { id: string }) => o.id);
+  const { data: copias } = ovIds.length
+    ? await supabase
+        .from("ordenes_venta")
+        .select("origen_ov_id, viaje:viajes!viaje_id(id, numero)")
+        .in("origen_ov_id", ovIds)
+    : { data: [] };
+
+  // El join llega como arreglo o como objeto según cómo lo infiera el cliente.
+  type CopiaRow = {
+    origen_ov_id: string | null;
+    viaje: { id: string; numero: number } | { id: string; numero: number }[] | null;
+  };
+  const reruteos: Record<string, { id: string; numero: number }> = {};
+  for (const c of (copias ?? []) as unknown as CopiaRow[]) {
+    const v = Array.isArray(c.viaje) ? c.viaje[0] : c.viaje;
+    if (c.origen_ov_id && v) reruteos[c.origen_ov_id] = v;
+  }
 
   // Rol del usuario para gatear acciones sensibles (ej. eliminar viaje).
   const {
@@ -100,6 +121,7 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
         alertas={(alertas ?? []) as AlertaLog[]}
         termografos={(termografos ?? []) as Termografo[]}
         auditoria={(auditoria ?? []) as Auditoria[]}
+        reruteos={reruteos}
         role={role}
       />
     </div>

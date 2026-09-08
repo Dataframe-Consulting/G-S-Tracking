@@ -46,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const supabase = createServerSupabase();
   const { data, error } = await supabase
     .from("viajes")
-    .select(`*, responsable:user_profiles!responsable_id(id, nombre, email), ordenes_venta ( *, productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre)) )`)
+    .select(`*, responsable:user_profiles!responsable_id(id, nombre, email), ordenes_venta ( *, productos:orden_productos(id, producto_id, cajas, cajas_rechazadas, producto:productos(id, nombre)) )`)
     .eq("id", params.id)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });

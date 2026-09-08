@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { Viaje, OrdenVenta } from "@/lib/types";
-import { STATUS_LABELS, STATUS_CLASSES, STATUS_DOT_CLASSES } from "@/lib/types";
+import { STATUS_LABELS, STATUS_CLASSES, STATUS_DOT_CLASSES, tieneRechazoParcial } from "@/lib/types";
 import { TempIndicator } from "@/components/Cargas/TempIndicator";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { formatFecha } from "@/lib/fecha";
@@ -380,7 +380,13 @@ function ovsForTab(v: Viaje, tab: TabKey): OrdenVenta[] | null {
   }
   if (!viajeConcluidoLocal(ovs)) return null;
   const subset = ovs.filter((o) =>
-    tab === "completados" ? o.status === "ENTREGADO" : o.status === "RECHAZO_CALIDAD"
+    tab === "completados"
+      ? o.status === "ENTREGADO"
+      : // Rechazados incluye las cargas rechazadas completas Y las que solo
+        // tuvieron rechazo parcial (migración 026), que conservan su status
+        // Entregado. Sin esto un rechazo parcial seria invisible en la pestaña
+        // que existe justamente para vigilarlos.
+        o.status === "RECHAZO_CALIDAD" || tieneRechazoParcial(o.productos)
   );
   return subset.length > 0 ? subset : null;
 }

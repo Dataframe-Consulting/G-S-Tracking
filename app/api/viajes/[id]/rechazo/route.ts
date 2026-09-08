@@ -20,6 +20,11 @@ import { sincronizarRangoViaje } from "@/lib/rangoViaje";
 
 const REJECTABLE: Status[] = ["PENDIENTE", "EN_PREPARACION", "TRANSITO"];
 
+// Detalle de un rechazo parcial (migración 026): cuántas cajas de cada línea de
+// producto salieron mal. Si no viene, el rechazo es de la carga completa.
+//   parciales: { [ov_id]: { [orden_producto_id]: cajas_rechazadas } }
+type ParcialPorOV = Record<string, Record<string, number>>;
+
 type ProductoInput = { producto_id?: string; cajas?: number | null };
 type OvNueva = {
   origen_ov_id: string;
@@ -90,6 +95,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Selecciona al menos una carga" }, { status: 400 });
   }
   const crearViaje = !!body.crear_viaje;
+
+  // Rechazos parciales: la carga NO pasa a RECHAZO_CALIDAD, se le anota cuántas
+  // cajas se rechazaron por línea. Las que no aparecen aquí son rechazo total.
+  const parciales: ParcialPorOV =
+    body.parciales && typeof body.parciales === "object" ? body.parciales : {};
 
   // Viaje origen (para numero en auditoría) + cargas a rechazar. Solo se rechazan
   // las que pertenecen a ESTE viaje y están en un estado rechazable.
@@ -258,6 +268,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           factura_gys: override?.factura_gys ?? null,
           status: "PENDIENTE" as Status,
           instrucciones: override?.instrucciones ?? orig.instrucciones ?? "",
+          // Vínculo carga→carga: permite mostrar "150 cj rechazadas → viaje #327"
+          // en la carga origen sin tener que leer la auditoría.
+          origen_ov_id: rid,
         };
         const { data: nuevaOV, error: errOV } = await supabase
           .from("ordenes_venta")
@@ -266,15 +279,32 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           .single();
         if (errOV || !nuevaOV) continue;
 
-        // Productos: override si viene, si no los de la original.
-        let productos: ProductoInput[] =
-          override?.productos && override.productos.length > 0 ? override.productos : [];
-        if (productos.length === 0) {
+        // Productos de la copia:
+        //   - rechazo parcial → solo las cajas rechazadas de cada línea
+        //   - rechazo total   → override si viene, si no las de la original
+        const parcialDeEsta = parciales[rid];
+        let productos: ProductoInput[] = [];
+        if (parcialDeEsta) {
           const { data: op } = await supabase
             .from("orden_productos")
-            .select("producto_id, cajas")
+            .select("id, producto_id, cajas")
             .eq("orden_id", rid);
-          productos = (op ?? []) as ProductoInput[];
+          productos = (op ?? [])
+            .map((l) => ({
+              producto_id: l.producto_id as string,
+              cajas: parcialDeEsta[l.id as string] ?? 0,
+            }))
+            .filter((l) => (l.cajas ?? 0) > 0);
+        } else {
+          productos =
+            override?.productos && override.productos.length > 0 ? override.productos : [];
+          if (productos.length === 0) {
+            const { data: op } = await supabase
+              .from("orden_productos")
+              .select("producto_id, cajas")
+              .eq("orden_id", rid);
+            productos = (op ?? []) as ProductoInput[];
+          }
         }
         const rows = productos
           .filter((p) => p && p.producto_id)
@@ -368,21 +398,51 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     await logAuditMany(supabase, { viaje_id: nuevoViaje.id, tipo: "CREACION" }, descNuevo);
   }
 
-  // Marcar las cargas del viaje origen como RECHAZO_CALIDAD (idempotente).
-  await supabase
-    .from("ordenes_venta")
-    .update({ status: "RECHAZO_CALIDAD", updated_at: new Date().toISOString() })
-    .in("id", rechazablesIds)
-    .eq("viaje_id", params.id);
+  // Rechazo PARCIAL: la carga conserva su status y sus cajas cargadas; solo se
+  // anota cuántas se rechazaron por línea. Así no se pierde cuánto se cargó, y
+  // el rechazo queda escrito aunque no se haya creado viaje nuevo (merma).
+  const idsParciales = rechazablesIds.filter((rid) => parciales[rid]);
+  for (const rid of idsParciales) {
+    const detalle = parciales[rid];
+    for (const [lineaId, cajas] of Object.entries(detalle)) {
+      const n = Number(cajas);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      await supabase
+        .from("orden_productos")
+        .update({ cajas_rechazadas: n })
+        .eq("id", lineaId)
+        .eq("orden_id", rid);
+    }
+    await supabase
+      .from("ordenes_venta")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", rid);
+  }
 
-  // Auditoría del rechazo con el prefijo estándar de cambio de status, para que la
-  // pestaña Rechazados ordene por cuándo se rechazó (misma fuente que el PATCH de OV).
-  const descRechazo = rechazables.map(
-    (o) =>
-      `${STATUS_CHANGE_AUDIT_PREFIX} ${o.ov_ref ?? "(sin ref)"} de ${statusLabel(
-        o.status
-      )} a ${statusLabel("RECHAZO_CALIDAD")}`
-  );
+  // Rechazo TOTAL: la carga sí pasa a RECHAZO_CALIDAD (idempotente).
+  const idsTotales = rechazablesIds.filter((rid) => !parciales[rid]);
+  if (idsTotales.length > 0) {
+    await supabase
+      .from("ordenes_venta")
+      .update({ status: "RECHAZO_CALIDAD", updated_at: new Date().toISOString() })
+      .in("id", idsTotales)
+      .eq("viaje_id", params.id);
+  }
+
+  // Auditoría. Los totales llevan el prefijo estándar de cambio de status para que
+  // la pestaña Rechazados pueda ordenar por cuándo se rechazó (misma fuente que el
+  // PATCH de OV). Los parciales NO cambian de status, así que se anotan aparte con
+  // el conteo de cajas.
+  const descRechazo = rechazables.map((o) => {
+    const id = o.id as string;
+    const ref = o.ov_ref ?? "(sin ref)";
+    const detalle = parciales[id];
+    if (detalle) {
+      const total = Object.values(detalle).reduce((n, c) => n + (Number(c) || 0), 0);
+      return `Rechazo parcial de OV ${ref}: ${total} caja(s)`;
+    }
+    return `${STATUS_CHANGE_AUDIT_PREFIX} ${ref} de ${statusLabel(o.status)} a ${statusLabel("RECHAZO_CALIDAD")}`;
+  });
   const transferNota = transferidos.length > 0 && nuevoViaje
     ? [`Transfirió ${transferidos.length} termógrafo(s) al viaje #${String(nuevoViaje.numero).padStart(4, "0")}`]
     : [];
