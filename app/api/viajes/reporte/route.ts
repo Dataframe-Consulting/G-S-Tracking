@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       linea:lineas_transportista!linea_transportista_id ( nombre, concesionario:concesionarios!concesionario_id ( nombre ) ),
       ordenes_venta (
         *,
-        productos:orden_productos(id, producto_id, cajas, producto:productos(id, nombre))
+        productos:orden_productos(id, producto_id, cajas, cajas_rechazadas, producto:productos(id, nombre))
       )
     `)
     .in("id", viajeIds);
@@ -136,9 +136,14 @@ export async function POST(req: Request) {
     for (const ov of ovs) {
       // Una fila por producto de la OV (Fase 5). Si la OV no tiene productos,
       // igual sale una fila con producto/cajas vacíos.
-      const lineas = (ov.productos ?? []).length > 0
+      type LineaReporte = {
+        producto?: { nombre: string } | null;
+        cajas: number | null;
+        cajas_rechazadas?: number | null;
+      };
+      const lineas: LineaReporte[] = (ov.productos ?? []).length > 0
         ? (ov.productos ?? [])
-        : [{ producto: null, cajas: null } as { producto?: { nombre: string } | null; cajas: number | null }];
+        : [{ producto: null, cajas: null }];
 
       for (const linea of lineas) {
         rows.push({
@@ -158,6 +163,11 @@ export async function POST(req: Request) {
           "Instrucciones": ov.instrucciones ?? null,
           "Producto": linea.producto?.nombre ?? null,
           "Cajas": linea.cajas ?? null,
+          // Rechazo parcial (migración 026): las cargadas no se descuentan, así
+          // que sin estas dos columnas un rechazo parcial era invisible aquí.
+          "Cajas Rechazadas": linea.cajas_rechazadas ?? null,
+          "Cajas Aceptadas":
+            linea.cajas != null ? linea.cajas - (linea.cajas_rechazadas ?? 0) : null,
           // ---- Nivel viaje ----
           "# Viaje": v.numero,
           "Origen": v.lugar_inicio,
@@ -210,6 +220,8 @@ export async function POST(req: Request) {
     { wch: 30 },  // Instrucciones
     { wch: 24 },  // Producto
     { wch: 8 },   // Cajas
+    { wch: 10 },  // Cajas Rechazadas
+    { wch: 10 },  // Cajas Aceptadas
     { wch: 8 },   // # Viaje
     { wch: 16 },  // Origen
     { wch: 16 },  // Destino
