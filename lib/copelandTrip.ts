@@ -8,15 +8,20 @@
  * siquiera leía la respuesta. Los dos equipos quedaron rastreando su viaje anterior
  * y dejaron de reportar cuando ESE viaje terminó, con el camión todavía en ruta.
  *
+ * La causa de fondo resultó ser un endpoint equivocado: se usaba CloseTrip para
+ * mover un tracker, y CloseTrip deja el trip COMPLETED pero NO libera el tracker.
+ * El DefineTrip siguiente se rechaza siempre, sin importar cuánto se espere. Quien
+ * libera es CancelTrip.
+ *
  * Lo que arregla esta capa:
+ *  - Usa CancelTrip (no CloseTrip) para soltar el tracker antes de moverlo.
  *  - Reintenta cuando Copeland responde rate limit o "tracker ya asignado".
- *  - Cierra el trip anterior ANTES de definir el nuevo, y verifica que cerró.
  *  - Deja constancia en la auditoría del viaje cuando algo falla de verdad, para
  *    que se vea el mismo día en vez de descubrirse por un camión sin señal.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { defineTrip, closeTrip, copelandTripId, inicioDeDiaUTC, finDeDiaUTC } from "@/lib/copeland";
+import { defineTrip, cancelTrip, copelandTripId, inicioDeDiaUTC, finDeDiaUTC } from "@/lib/copeland";
 import { logAudit } from "@/lib/audit";
 
 // Backoff acotado: 1.5s y 3s entre intentos, o sea 4.5s como peor caso por
@@ -109,21 +114,25 @@ export async function moverTrackerDeViaje(
   if (viajeOrigenId) {
     const origen = await cargarViaje(supabase, viajeOrigenId);
     if (origen) {
+      // CancelTrip, no CloseTrip: CloseTrip deja el trip COMPLETED pero el tracker
+      // SIGUE asignado, y entonces el DefineTrip de abajo se rechaza con "already
+      // assigned" por más que se espere. Solo CancelTrip lo libera. Comprobado
+      // contra la API el 2026-09-09 con el termógrafo 8927561731 (viajes #0326 →
+      // #0332): CloseTrip + DefineTrip falló; CancelTrip + DefineTrip funcionó.
       const tripViejo = copelandTripId(origen.numero, trackerId);
       for (let intento = 1; intento <= INTENTOS; intento++) {
-        const r = await closeTrip(tripViejo, trackerId);
+        const r = await cancelTrip(tripViejo, trackerId);
         if (r.success) break;
         if (intento < INTENTOS && esReintentable(r)) {
           await dormir(ESPERA_MS * intento);
           continue;
         }
-        // Si el trip viejo no cerró, el DefineTrip siguiente va a ser rechazado.
-        // Se registra y se intenta de todos modos: el reintento del define puede
-        // alcanzar a que Copeland lo libere por su cuenta.
+        // Si el trip viejo no se liberó, el DefineTrip siguiente va a ser
+        // rechazado. Se registra y se intenta de todos modos.
         await registrarFallo(
           supabase,
           viajeDestinoId,
-          `No se pudo cerrar el trip anterior del termógrafo ${trackerId} (viaje #${String(
+          `No se pudo liberar el termógrafo ${trackerId} de su viaje anterior (#${String(
             origen.numero
           ).padStart(4, "0")}): ${r.error ?? "error desconocido"}`
         );

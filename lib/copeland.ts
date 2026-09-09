@@ -7,11 +7,13 @@
  *
  * MODO REAL  (COPELAND_SIMULATE=false):
  *   - defineTrip  → POST /edi/DefineTrip   al asignar termógrafo
- *   - closeTrip   → POST /edi/CloseTrip    al quitar termógrafo
+ *   - closeTrip   → POST /edi/CloseTrip    al concluir el viaje (deja COMPLETED)
+ *   - cancelTrip  → POST /edi/CancelTrip   al mover el termógrafo a otro viaje
+ *                                          (es el único que LIBERA el tracker)
  *   - getSensorReadings → POST /edi/GetSensorReadings (global, paginado)
  *
  * MODO SIM   (COPELAND_SIMULATE=true, default):
- *   - defineTrip / closeTrip son no-ops
+ *   - defineTrip / closeTrip / cancelTrip son no-ops
  *   - simulateDeviceReadings genera datos por dispositivo
  */
 
@@ -198,24 +200,53 @@ export async function defineTrip(
 }
 
 /**
- * Cierra un trip. Devuelve el resultado en vez de tragárselo: si CloseTrip falla,
- * el tracker sigue amarrado a este trip y el DefineTrip que venga después va a ser
- * rechazado. Antes esta función ni siquiera leía la respuesta, así que ese fallo
- * era invisible — y es lo que dejó al viaje #0282 rastreando el viaje equivocado.
+ * Termina un trip dejándolo COMPLETED en Copeland. Se usa cuando el viaje concluye
+ * o se quita el termógrafo sin reasignarlo. NO libera el tracker: para moverlo a
+ * otro viaje hay que usar `cancelTrip`.
  */
-export async function closeTrip(
+export function closeTrip(tripId: string, trackerId: string): Promise<ResultadoTrip> {
+  return terminarTrip("CloseTrip", tripId, trackerId);
+}
+
+/**
+ * Termina un trip Y libera el tracker, para poder asignarlo a otro viaje. Es la
+ * operación correcta al mover un termógrafo entre viajes.
+ */
+export function cancelTrip(tripId: string, trackerId: string): Promise<ResultadoTrip> {
+  return terminarTrip("CancelTrip", tripId, trackerId);
+}
+
+export type ResultadoTrip = { success: boolean; error?: string; rateLimited?: boolean };
+
+/**
+ * CloseTrip y CancelTrip NO son equivalentes, aunque la documentación de Copeland
+ * describa a los dos con la misma frase ("forces a trip to end"). Comprobado contra
+ * la API el 2026-09-09 con el termógrafo 8927561731:
+ *
+ *   CloseTrip  → el trip queda COMPLETED, pero el tracker SIGUE ASIGNADO.
+ *                Un DefineTrip posterior se rechaza con "The specified Tracker is
+ *                already assigned to a Trip", sin importar cuánto se espere.
+ *   CancelTrip → termina el trip Y LIBERA el tracker. El DefineTrip siguiente pasa.
+ *
+ * De ahí la regla: CloseTrip cuando el viaje concluye (queremos que quede COMPLETED
+ * en el historial de Copeland), CancelTrip cuando el equipo se va a otro viaje.
+ * Usar CloseTrip para mover un tracker es lo que dejó sin rastreo a los viajes
+ * #0282 y #0332.
+ */
+async function terminarTrip(
+  endpoint: "CloseTrip" | "CancelTrip",
   tripId: string,
   trackerId: string
-): Promise<{ success: boolean; error?: string; rateLimited?: boolean }> {
+): Promise<ResultadoTrip> {
   if (process.env.COPELAND_SIMULATE !== "false") return { success: true };
   try {
-    const res = await copelandPost("CloseTrip", { TripID: tripId, TrackerID: trackerId });
+    const res = await copelandPost(endpoint, { TripID: tripId, TrackerID: trackerId });
     if (res.status !== 200) {
       return { success: false, error: `HTTP ${res.status}: ${res.body}` };
     }
     const data = JSON.parse(res.body);
-    // La respuesta de CloseTrip llega con las llaves en mayúsculas o en PascalCase
-    // según el caso (ver ejemplos de la doc), así que se aceptan ambas.
+    // La respuesta llega con las llaves en mayúsculas o en PascalCase según el
+    // caso (ver ejemplos de la doc), así que se aceptan ambas.
     const code = data.ErrorCode ?? data.ERRORCODE;
     const desc = data.ErrorDescription ?? data.ERRORDESCRIPTION;
     if (code !== 0 && code != null) {
