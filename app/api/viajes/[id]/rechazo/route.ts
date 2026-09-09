@@ -5,6 +5,11 @@ import { STATUS_LABELS, type Status } from "@/lib/types";
 import { logAuditMany, STATUS_CHANGE_AUDIT_PREFIX } from "@/lib/audit";
 import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
 import { sincronizarRangoViaje } from "@/lib/rangoViaje";
+import { moverTrackerDeViaje } from "@/lib/copelandTrip";
+
+// Estas rutas hablan con Copeland (cerrar/definir trips, con reintentos), así que
+// necesitan más margen que el default de ejecución.
+export const maxDuration = 60;
 
 // Cambio 2 — Rechazo de cargas + (opcional) creación de un viaje nuevo para
 // re-rutearlas. Todo en un solo endpoint, diseñado para ser IDEMPOTENTE:
@@ -360,9 +365,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // todavía, que es lo normal al rechazar — se llena al reagendarla.
     await sincronizarRangoViaje(supabase, nuevoViaje.id);
 
-    // Transferir termógrafos seleccionados. Solo reasigna viaje_id; el filtro
-    // viaje_id=origen hace que un retry no mueva de más (idempotente). No toca
-    // Copeland ni corre backfill: el viaje nuevo empieza desde cero.
+    // Transferir termógrafos seleccionados. El filtro viaje_id=origen hace que un
+    // retry no mueva de más (idempotente).
     const termoIds: string[] = Array.isArray(body.termografo_ids)
       ? body.termografo_ids.filter(Boolean)
       : [];
@@ -376,6 +380,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         .eq("deshabilitado", false)
         .select("id");
       transferidos = (moved ?? []).map((t) => t.id as string);
+    }
+
+    // Mover el rastreo en Copeland: cerrar el trip del viaje origen y definir el
+    // del viaje nuevo, por cada termógrafo transferido. Antes esto no se hacía y el
+    // equipo se quedaba rastreando el viaje original — dejaba de reportar cuando
+    // ESE viaje terminaba, aunque el camión siguiera en ruta con la carga nueva.
+    for (const tid of transferidos) {
+      await moverTrackerDeViaje(supabase, tid, params.id, nuevoViaje.id);
     }
 
     // Al asignar termógrafo(s) al viaje nuevo, sus cargas copiadas (Pendiente)

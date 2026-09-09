@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { defineTrip, copelandTripId, inicioDeDiaUTC, finDeDiaUTC } from "@/lib/copeland";
+import { moverTrackerDeViaje } from "@/lib/copelandTrip";
 import { runSync } from "@/lib/sync";
 import { logAudit } from "@/lib/audit";
 import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
+
+// Estas rutas hablan con Copeland (cerrar/definir trips, con reintentos), así que
+// necesitan más margen que el default de ejecución.
+export const maxDuration = 60;
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabase();
@@ -47,6 +51,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   if (!viaje) return NextResponse.json({ error: "Viaje no encontrado" }, { status: 404 });
 
+  // De qué viaje viene el tracker (si venía de alguno). Se lee ANTES del upsert
+  // porque es el trip que hay que cerrar en Copeland; si no, queda amarrado al
+  // viaje anterior y deja de reportar cuando ese viaje termina.
+  const { data: previo } = await supabase
+    .from("termografos")
+    .select("viaje_id")
+    .eq("id", id)
+    .maybeSingle();
+  const viajePrevioId = (previo?.viaje_id as string | null) ?? null;
+
   await supabase.from("termografos").upsert(
     { id, asignado: true, viaje_id: params.id },
     { onConflict: "id" }
@@ -61,18 +75,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // Si es el primer termógrafo del viaje, las cargas pre-tránsito pasan a En tránsito.
   await ponerOVsEnTransitoAlAsignar(supabase, params.id, [id]);
 
-  defineTrip({
-    tripId: copelandTripId(viaje.numero, id),
-    trackerId: id,
-    originName: viaje.lugar_inicio,
-    destinationName: viaje.lugar_fin,
-    scheduledStartUTC: inicioDeDiaUTC(viaje.fecha_inicio),
-    scheduledEndUTC: finDeDiaUTC(viaje.fecha_fin),
-  })
-    .then((r) => {
-      if (!r.success) console.error("DefineTrip rechazado:", r.error);
-    })
-    .catch((e) => console.error("DefineTrip error:", e));
+  // Mover el tracker a este viaje en Copeland: cierra el trip anterior (si traía
+  // uno) y define el nuevo, con reintentos. Se espera a que termine —son unos
+  // segundos— porque hacerlo en segundo plano fue justo lo que dejó fallos
+  // invisibles: en serverless la instancia se congela al responder.
+  await moverTrackerDeViaje(
+    supabase,
+    id,
+    viajePrevioId && viajePrevioId !== params.id ? viajePrevioId : null,
+    params.id
+  );
 
   // Backfill: jala de inmediato las lecturas del termógrafo recién asignado,
   // sin depender del cursor global del cron (evita perder lecturas previas a la

@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { defineTrip, closeTrip, copelandTripId, inicioDeDiaUTC, finDeDiaUTC } from "@/lib/copeland";
+import { closeTrip, copelandTripId } from "@/lib/copeland";
+import { moverTrackerDeViaje, sincronizarTripsDeViaje } from "@/lib/copelandTrip";
 import { logAuditMany } from "@/lib/audit";
 import { cToF } from "@/lib/temperature";
 import { ponerOVsEnTransitoAlAsignar } from "@/lib/termografo";
 import { IMPORTACION_LABELS, type ImportacionEstado } from "@/lib/types";
+
+// Estas rutas hablan con Copeland (cerrar/definir trips, con reintentos), así que
+// necesitan más margen que el default de ejecución.
+export const maxDuration = 60;
 
 const VIAJE_FIELD_LABELS: Record<string, string> = {
   lugar_inicio: "lugar de inicio",
@@ -108,22 +113,40 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  // Manejar cambio de termógrafo
+  // Cambio de termógrafo: cerrar el trip anterior y definir el nuevo, con
+  // reintentos y dejando constancia en la auditoría si Copeland lo rechaza.
   if ("termografo_id" in body && body.termografo_id !== prev?.termografo_id) {
     const oldTrackerId = prev?.termografo_id ?? null;
     const newTrackerId = body.termografo_id ?? null;
 
-    // Desasignar el anterior: cerrar trip en Copeland + actualizar DB
+    // Sale el anterior: se cierra su trip de ESTE viaje y se verifica que cerró.
     if (oldTrackerId) {
-      await closeTrip(copelandTripId(prev?.numero ?? params.id, oldTrackerId), oldTrackerId);
+      const cierre = await closeTrip(
+        copelandTripId(prev?.numero ?? params.id, oldTrackerId),
+        oldTrackerId
+      );
       await supabase
         .from("termografos")
         .update({ asignado: false, viaje_id: null })
         .eq("id", oldTrackerId);
+      if (!cierre.success) {
+        await logAuditMany(supabase, { viaje_id: params.id, tipo: "MODIFICACION" }, [
+          `No se pudo cerrar el rastreo del termógrafo ${oldTrackerId} en Copeland: ` +
+            `${cierre.error ?? "error desconocido"}. Al reasignarlo puede quedar rastreando este viaje.`,
+        ]);
+      }
     }
 
-    // Asignar el nuevo: upsert en DB (crea si el serial no existe) + DefineTrip en Copeland
     if (newTrackerId) {
+      // De dónde viene el nuevo: hay que cerrar SU trip anterior, no el de este
+      // viaje. Se lee antes del upsert.
+      const { data: previo } = await supabase
+        .from("termografos")
+        .select("viaje_id")
+        .eq("id", newTrackerId)
+        .maybeSingle();
+      const viajePrevioId = (previo?.viaje_id as string | null) ?? null;
+
       await supabase.from("termografos").upsert(
         { id: newTrackerId, asignado: true, viaje_id: data.id },
         { onConflict: "id" }
@@ -132,26 +155,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       // Si es el primer termógrafo del viaje, las cargas pre-tránsito pasan a En tránsito.
       await ponerOVsEnTransitoAlAsignar(supabase, params.id, [newTrackerId]);
 
-      // Usar datos del viaje actualizado para DefineTrip
-      const lugarInicio = (update.lugar_inicio as string | undefined) ?? prev?.lugar_inicio ?? "";
-      const lugarFin = (update.lugar_fin as string | undefined) ?? prev?.lugar_fin ?? "";
-      const fechaInicio = (update.fecha_inicio as string | undefined) ?? prev?.fecha_inicio;
-      const fechaFin = (update.fecha_fin as string | undefined) ?? prev?.fecha_fin;
-
-      // DefineTrip es best-effort: no bloqueamos si falla
-      defineTrip({
-        tripId: copelandTripId(prev?.numero ?? params.id, newTrackerId),
-        trackerId: newTrackerId,
-        originName: lugarInicio,
-        destinationName: lugarFin,
-        scheduledStartUTC: inicioDeDiaUTC(fechaInicio),
-        scheduledEndUTC: finDeDiaUTC(fechaFin),
-      })
-        .then((r) => {
-          if (!r.success) console.error("DefineTrip rechazado:", r.error);
-        })
-        .catch((e) => console.error("DefineTrip error:", e));
+      await moverTrackerDeViaje(
+        supabase,
+        newTrackerId,
+        viajePrevioId && viajePrevioId !== params.id ? viajePrevioId : null,
+        params.id
+      );
     }
+  }
+
+  // Si cambió la ruta, hay que reemitir el trip: Copeland conserva el origen y
+  // destino con los que se definió, así que corregir el destino después de asignar
+  // el termógrafo dejaba sus reportes y avisos de llegada midiendo contra la ciudad
+  // anterior. El rango de fechas lo sincroniza recalcularRangoViaje por su cuenta.
+  const rutaCambio =
+    ("lugar_inicio" in body && prev?.lugar_inicio !== data.lugar_inicio) ||
+    ("lugar_fin" in body && prev?.lugar_fin !== data.lugar_fin);
+  if (rutaCambio) {
+    await sincronizarTripsDeViaje(supabase, params.id);
   }
 
   // Auditoría: una entrada por campo que realmente cambió

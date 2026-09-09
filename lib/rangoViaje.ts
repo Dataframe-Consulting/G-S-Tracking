@@ -16,7 +16,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { defineTrip, copelandTripId, inicioDeDiaUTC, finDeDiaUTC } from "@/lib/copeland";
+import { copelandTripId } from "@/lib/copeland";
+import { sincronizarTripsDeViaje } from "@/lib/copelandTrip";
 
 export type RangoViaje = {
   /** true si el rango realmente cambió de valor y se persistió. */
@@ -148,38 +149,20 @@ export async function sincronizarRangoViaje(
 
   if (!termos?.length) return rango;
 
-  const { numero, lugar_inicio, lugar_fin } = rango.viaje;
+  // Debounce por TripID: evita encadenar llamadas cuando se editan varias cargas
+  // del mismo viaje seguidas, que es como se cae en el rate limit de Copeland.
   const ahora = Date.now();
+  const tripIds = termos.map((t) => copelandTripId(rango.viaje!.numero, t.id as string));
+  const reciente = tripIds.some((id) => {
+    const previa = ultimaEmision.get(id);
+    return previa != null && ahora - previa < DEBOUNCE_MS;
+  });
+  if (reciente) return rango;
+  for (const id of tripIds) ultimaEmision.set(id, ahora);
 
-  for (const t of termos) {
-    const trackerId = t.id as string;
-    const tripId = copelandTripId(numero, trackerId);
-
-    const previa = ultimaEmision.get(tripId);
-    if (previa && ahora - previa < DEBOUNCE_MS) continue;
-    ultimaEmision.set(tripId, ahora);
-
-    defineTrip({
-      tripId,
-      trackerId,
-      originName: lugar_inicio,
-      destinationName: lugar_fin,
-      scheduledStartUTC: inicioDeDiaUTC(rango.fecha_inicio),
-      scheduledEndUTC: finDeDiaUTC(rango.fecha_fin),
-    })
-      .then((r) => {
-        if (r.success) return;
-        if (r.rateLimited) {
-          // Rate limit: el trip se queda con la ventana anterior hasta el
-          // siguiente cambio de rango. Se permite reintentar antes del debounce.
-          ultimaEmision.delete(tripId);
-          console.warn(`DefineTrip rate-limited (${tripId}), se reintenta al próximo cambio`);
-          return;
-        }
-        console.error(`DefineTrip rechazado (${tripId}):`, r.error);
-      })
-      .catch((e) => console.error(`DefineTrip error (${tripId}):`, e));
-  }
+  // La reemisión con reintentos y el registro del fallo en la auditoría viven en
+  // sincronizarTripsDeViaje, para que se comporte igual desde todos los puntos.
+  await sincronizarTripsDeViaje(supabase, viajeId);
 
   return rango;
 }

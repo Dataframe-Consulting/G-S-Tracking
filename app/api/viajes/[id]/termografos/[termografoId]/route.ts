@@ -3,6 +3,10 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { closeTrip, copelandTripId } from "@/lib/copeland";
 import { logAudit } from "@/lib/audit";
 
+// Estas rutas hablan con Copeland (cerrar/definir trips, con reintentos), así que
+// necesitan más margen que el default de ejecución.
+export const maxDuration = 60;
+
 // Deshabilitar un termógrafo (Cambio 1). A diferencia del DELETE (que lo quita
 // del viaje y cierra el trip en Copeland), esto SOLO lo marca deshabilitado:
 // deja de leer/promediar/alertar en AgroTrack pero conserva asignado=true,
@@ -62,10 +66,13 @@ export async function DELETE(
     .eq("id", params.id)
     .single();
 
-  closeTrip(
+  // Cerrar el trip en Copeland y VERIFICAR que cerró. Si no cierra, el tracker
+  // sigue amarrado a este viaje y el próximo DefineTrip será rechazado — así se
+  // perdió el rastreo del viaje #0282. Se deja constancia en la auditoría.
+  const cierre = await closeTrip(
     copelandTripId(viaje?.numero ?? params.id, params.termografoId),
     params.termografoId
-  ).catch(() => {});
+  );
 
   const { data: removed } = await supabase
     .from("termografos")
@@ -81,6 +88,17 @@ export async function DELETE(
       tipo: "MODIFICACION",
       descripcion: `Quitó termógrafo ${params.termografoId}`,
     });
+
+    if (!cierre.success) {
+      await logAudit(supabase, {
+        viaje_id: params.id,
+        tipo: "MODIFICACION",
+        descripcion:
+          `No se pudo cerrar el rastreo del termógrafo ${params.termografoId} en Copeland: ` +
+          `${cierre.error ?? "error desconocido"}. Al reasignarlo a otro viaje puede quedar ` +
+          `rastreando este.`,
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });

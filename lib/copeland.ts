@@ -197,12 +197,36 @@ export async function defineTrip(
   }
 }
 
-export async function closeTrip(tripId: string, trackerId: string): Promise<void> {
-  if (process.env.COPELAND_SIMULATE !== "false") return;
+/**
+ * Cierra un trip. Devuelve el resultado en vez de tragárselo: si CloseTrip falla,
+ * el tracker sigue amarrado a este trip y el DefineTrip que venga después va a ser
+ * rechazado. Antes esta función ni siquiera leía la respuesta, así que ese fallo
+ * era invisible — y es lo que dejó al viaje #0282 rastreando el viaje equivocado.
+ */
+export async function closeTrip(
+  tripId: string,
+  trackerId: string
+): Promise<{ success: boolean; error?: string; rateLimited?: boolean }> {
+  if (process.env.COPELAND_SIMULATE !== "false") return { success: true };
   try {
-    await copelandPost("CloseTrip", { TripID: tripId, TrackerID: trackerId });
-  } catch {
-    // best-effort: no bloqueamos la operación del usuario si esto falla
+    const res = await copelandPost("CloseTrip", { TripID: tripId, TrackerID: trackerId });
+    if (res.status !== 200) {
+      return { success: false, error: `HTTP ${res.status}: ${res.body}` };
+    }
+    const data = JSON.parse(res.body);
+    // La respuesta de CloseTrip llega con las llaves en mayúsculas o en PascalCase
+    // según el caso (ver ejemplos de la doc), así que se aceptan ambas.
+    const code = data.ErrorCode ?? data.ERRORCODE;
+    const desc = data.ErrorDescription ?? data.ERRORDESCRIPTION;
+    if (code !== 0 && code != null) {
+      // 9002 = "Trip does not exist": el trip ya no estaba, que es el estado que
+      // buscábamos. Se trata como éxito para no bloquear el DefineTrip siguiente.
+      if (code === 9002) return { success: true };
+      return { success: false, rateLimited: code === 1011, error: desc ?? `ErrorCode ${code}` };
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
   }
 }
 
