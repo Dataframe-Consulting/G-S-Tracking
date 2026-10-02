@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { obtenerCostosMeta } from "@/lib/metaBilling";
+import { obtenerCostosMeta, inicioMesEpoch, finMesEpoch } from "@/lib/metaBilling";
 
 // Consultar Meta toma unos segundos (dos llamadas a la Graph API).
 export const maxDuration = 60;
@@ -82,9 +82,6 @@ export async function POST() {
     );
   }
 
-  // Nuestro propio conteo, para contrastarlo con lo que Meta entregó. Una brecha
-  // grande entre ambos es la señal de que Meta no está entregando (fue así como
-  // se detectó el bloqueo por adeudo de septiembre).
   const { data: pagados } = await supabase
     .from("whatsapp_facturacion")
     .select("periodo")
@@ -97,12 +94,25 @@ export async function POST() {
   for (const p of periodos) {
     if (congelados.has(p.periodo)) continue;
 
+    // `enviados` sale de NUESTRO registro, no del de Meta. Meta solo cuenta como
+    // enviados los que efectivamente mandó, así que su cifra siempre empata con
+    // la de entregados y nunca mostraría una brecha. La diferencia que importa es
+    // cuántos intentó mandar AgroTrack contra cuántos salieron de verdad: en
+    // septiembre fueron 7,498 contra 5,255, y esos 2,243 son la huella del
+    // bloqueo de la cuenta por adeudo.
+    const { count: enviadosNuestros } = await supabase
+      .from("alertas_log")
+      .select("id", { count: "exact", head: true })
+      .not("whatsapp_sid", "is", null)
+      .gte("created_at", new Date(inicioMesEpoch(p.periodo) * 1000).toISOString())
+      .lt("created_at", new Date(finMesEpoch(p.periodo) * 1000).toISOString());
+
     const { error } = await supabase.from("whatsapp_facturacion").upsert(
       {
         periodo: p.periodo,
         mensajes: p.mensajes,
         costo_mxn: p.costo,
-        enviados: p.enviados,
+        enviados: enviadosNuestros ?? null,
         sincronizado_at: ahora,
         updated_at: ahora,
       },

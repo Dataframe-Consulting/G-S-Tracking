@@ -32,8 +32,11 @@ export type PeriodoMeta = {
   mensajes: number;
   /** Costo real en la moneda de la cuenta (MXN). */
   costo: number;
-  /** Mensajes que Meta registra como enviados. */
-  enviados: number;
+  /** Mensajes que META registra como enviados. Ojo: Meta NO cuenta aquí los
+   *  que aceptó por API pero nunca llegó a mandar, así que casi siempre va a
+   *  ser igual a `mensajes`. El dato que revela una brecha es nuestro propio
+   *  conteo de alertas_log, que se calcula aparte. */
+  enviadosMeta: number;
 };
 
 /** Inicio del mes en hora de Sonora, como epoch en segundos. */
@@ -103,7 +106,7 @@ export async function obtenerCostosMeta(desde: string): Promise<PeriodoMeta[]> {
   for (const bloque of pa?.data ?? []) {
     for (const p of bloque.data_points ?? []) {
       const periodo = periodoDeEpoch(p.start);
-      const acc = porPeriodo.get(periodo) ?? { periodo, mensajes: 0, costo: 0, enviados: 0 };
+      const acc = porPeriodo.get(periodo) ?? { periodo, mensajes: 0, costo: 0, enviadosMeta: 0 };
       acc.mensajes += p.volume ?? 0;
       acc.costo += p.cost ?? 0;
       porPeriodo.set(periodo, acc);
@@ -113,8 +116,8 @@ export async function obtenerCostosMeta(desde: string): Promise<PeriodoMeta[]> {
   const an = analytics.analytics as { data_points?: AnalyticsPoint[] } | undefined;
   for (const p of an?.data_points ?? []) {
     const periodo = periodoDeEpoch(p.start);
-    const acc = porPeriodo.get(periodo) ?? { periodo, mensajes: 0, costo: 0, enviados: 0 };
-    acc.enviados = p.sent ?? 0;
+    const acc = porPeriodo.get(periodo) ?? { periodo, mensajes: 0, costo: 0, enviadosMeta: 0 };
+    acc.enviadosMeta = p.sent ?? 0;
     // Si pricing_analytics no respondió (p. ej. cuentas con línea de crédito
     // compartida), al menos se conserva el volumen entregado.
     if (acc.mensajes === 0) acc.mensajes = p.delivered ?? 0;
