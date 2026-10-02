@@ -2,8 +2,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendWhatsAppAlert } from "./whatsapp-meta";
 import { cToF } from "./temperature";
 
-const COOLDOWN_MINUTES = 30; // minutos de espera entre reenvíos de la misma alerta
-const SOSTENIDO_MINUTES = 30; // minutos continuos fuera de rango antes de alertar
+// Espera entre REENVÍOS de la misma alerta (mismo viaje + mismo tipo). Se cuenta
+// desde el último mensaje enviado, no desde que la carga salió de rango.
+//
+// Estaba en 30 min y generaba mucha repetición: un episodio largo de septiembre
+// duró 5.6 días fuera de rango y mandó 271 mensajes del mismo viaje. Subirlo a 60
+// baja el volumen ~46% (de 7,400 a 3,960 mensajes/mes entre los dos destinatarios)
+// SIN perder un solo evento: no cambia qué se detecta ni qué tan rápido, solo deja
+// de insistir sobre algo que ya se reportó.
+const COOLDOWN_MINUTES = 60;
+
+// Minutos continuos fuera de rango antes de la PRIMERA alerta de un episodio.
+// Se deja en 30: subirlo a 60 solo retrasaría el aviso y dejaría de notificar los
+// episodios que duran entre 30 y 60 min (135 en septiembre), a cambio de apenas
+// un 11% menos de mensajes.
+const SOSTENIDO_MINUTES = 30;
 
 export interface CheckAlertaResult {
   viajeId: string;
