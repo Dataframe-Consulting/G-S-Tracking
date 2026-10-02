@@ -71,11 +71,7 @@ export function WhatsAppCostosClient({ periodos }: { periodos: Fila[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-xs text-brand-500">
-          Meta cobra por mensaje <span className="font-semibold text-brand-700">entregado</span>,
-          no por mensaje enviado. Las cifras vienen directo de Meta.
-        </div>
+      <div className="flex justify-end">
         <button
           onClick={sincronizar}
           disabled={sincronizando}
@@ -99,9 +95,9 @@ export function WhatsAppCostosClient({ periodos }: { periodos: Fila[] }) {
               <thead className="bg-brand-50 text-xs uppercase tracking-widest text-brand-400">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Mes</th>
-                  <th className="px-4 py-3 text-right font-medium">Cobrables</th>
+                  <th className="px-4 py-3 text-right font-medium">Enviados</th>
+                  <th className="px-4 py-3 text-right font-medium">Recibidos</th>
                   <th className="px-4 py-3 text-right font-medium">Costo</th>
-                  <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Entrega</th>
                   <th className="px-4 py-3 text-left font-medium">Estado</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -119,19 +115,21 @@ export function WhatsAppCostosClient({ periodos }: { periodos: Fila[] }) {
                         {nombreMes(p.periodo)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-brand-700">
+                        {(p.enviados ?? 0).toLocaleString("es-MX")}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-brand-700">
                         {p.mensajes.toLocaleString("es-MX")}
+                        {hayBrecha && (
+                          <div
+                            className="text-[11px] font-medium text-amber-700"
+                            title="Meta no entregó todos los mensajes que se enviaron"
+                          >
+                            ⚠ {noEntregados.toLocaleString("es-MX")} sin entregar
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold text-brand-900">
                         {mxn(Number(p.costo_mxn))}
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell text-xs">
-                        {hayBrecha ? (
-                          <span className="text-amber-700" title="Meta no entregó todos los mensajes que enviamos">
-                            ⚠ {noEntregados.toLocaleString("es-MX")} no entregados
-                          </span>
-                        ) : (
-                          <span className="text-emerald-700">✓</span>
-                        )}
                       </td>
                       <td className="px-4 py-3">
                         {pagado ? (
