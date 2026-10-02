@@ -307,3 +307,18 @@ export interface Auditoria {
   descripcion: string;
   created_at: string;
 }
+
+/** Costo mensual de WhatsApp. `mensajes` y `costo_mxn` los reporta Meta
+ *  (cobra por mensaje ENTREGADO); el estado de pago es manual porque Meta
+ *  no lo expone por API. */
+export interface WhatsAppFacturacion {
+  periodo: string;              // 'AAAA-MM'
+  mensajes: number;             // entregados y cobrables, según Meta
+  costo_mxn: number;
+  enviados: number | null;      // nuestro conteo, para detectar brechas de entrega
+  estado: "PENDIENTE" | "PAGADO";
+  pagado_at: string | null;
+  pagado_por: string | null;
+  nota: string | null;
+  sincronizado_at: string | null;
+}

@@ -69,7 +69,18 @@ const cards = [
         <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
       </svg>
     )
-  }
+  },
+  {
+    href: "/configuracion/whatsapp",
+    title: "WhatsApp",
+    desc: "Costos mensuales de mensajes y control de pagos",
+    master: true,
+    icon: (
+      <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l2.652-3.978c.26-.39.687-.634 1.153-.67 1.09-.086 2.17-.208 3.238-.365 1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.39 48.39 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+      </svg>
+    ),
+  },
 ];
 
 export default async function ConfiguracionPage() {
@@ -131,7 +142,9 @@ export default async function ConfiguracionPage() {
           <div className="flex-1 h-px bg-brand-100" />
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          {cards.map((c) => (
+          {cards
+            .filter((c) => !("master" in c && c.master) || profile?.role === "master")
+            .map((c) => (
             <Link
               key={c.href}
               href={c.href}
