@@ -35,13 +35,19 @@ export default async function DashboardPage({
   const fechaHasta = searchParams.fecha_hasta ?? hoy;
   const productoId = searchParams.producto_id ?? "";
 
-  const [ordenes, ahora, frio, idsAlertas, { data: productosData }] = await Promise.all([
+  const [ordenes, ahora, idsAlertas, { data: productosData }] = await Promise.all([
     cargasDelPeriodo(supabase, fechaDesde, fechaHasta, productoId || undefined),
     estadoAhora(supabase),
-    cadenaFrio(supabase, fechaDesde, fechaHasta),
     alertasDelPeriodo(supabase, fechaDesde, fechaHasta),
     supabase.from("productos").select("*").order("nombre"),
   ]);
+
+  // Con filtro de producto, la cadena de frío se acota a los viajes de esas
+  // cargas; sin filtro, cuenta todas las mediciones del periodo.
+  const viajesDelFiltro = productoId
+    ? [...new Set(ordenes.map((o) => o.viaje?.id).filter(Boolean) as string[])]
+    : undefined;
+  const frio = await cadenaFrio(supabase, fechaDesde, fechaHasta, viajesDelFiltro);
 
   const productos = (productosData ?? []) as Producto[];
   const viajesAlerta = viajesConAlerta(idsAlertas);

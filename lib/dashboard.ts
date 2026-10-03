@@ -165,10 +165,20 @@ export async function estadoAhora(supabase: SupabaseClient): Promise<Ahora> {
 export async function cadenaFrio(
   supabase: SupabaseClient,
   desde: string,
-  hasta: string
+  hasta: string,
+  /** Viajes a los que acotar. Se usa cuando hay filtro de producto activo, para
+   *  que el porcentaje responda al filtro igual que el resto de la pantalla.
+   *  Sin esto, filtrar por "Uva verde" dejaba el número global y contradecía al
+   *  resto del dashboard. */
+  viajeIds?: string[]
 ): Promise<CadenaFrio> {
   const ini = inicioDelDiaUTC(desde);
   const fin = finDelDiaUTC(hasta);
+
+  // Sin viajes que medir, no hay nada que contar.
+  if (viajeIds && viajeIds.length === 0) {
+    return { lecturas: 0, enRango: 0, pctEnRango: null };
+  }
 
   const contarLecturas = async (soloEnRango: boolean) => {
     let q = supabase
@@ -176,6 +186,7 @@ export async function cadenaFrio(
       .select("id", { count: "exact", head: true })
       .gte("timestamp", ini)
       .lt("timestamp", fin);
+    if (viajeIds) q = q.in("viaje_id", viajeIds);
     if (soloEnRango) q = q.eq("fuera_rango", false);
     const { count } = await q;
     return count ?? 0;
