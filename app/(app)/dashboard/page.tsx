@@ -7,13 +7,16 @@ import { CadenaFrioCard } from "@/components/Dashboard/CadenaFrioCard";
 import { PeriodoCard } from "@/components/Dashboard/PeriodoCard";
 import { CargasPorDia } from "@/components/Dashboard/CargasPorDia";
 import { TopBarras } from "@/components/Dashboard/TopBarras";
+import { TabsDashboard } from "@/components/Dashboard/TabsDashboard";
 import {
   hoySonora,
   diasAtrasSonora,
   cargasDelPeriodo,
   estadoAhora,
   cadenaFrio,
-  viajesConAlertaEnPeriodo,
+  detalleCadenaFrio,
+  alertasDelPeriodo,
+  viajesConAlerta,
   diasDelPeriodo,
   agrupar,
 } from "@/lib/dashboard";
@@ -32,15 +35,17 @@ export default async function DashboardPage({
   const fechaHasta = searchParams.fecha_hasta ?? hoy;
   const productoId = searchParams.producto_id ?? "";
 
-  const [ordenes, ahora, frio, viajesAlerta, { data: productosData }] = await Promise.all([
+  const [ordenes, ahora, frio, idsAlertas, { data: productosData }] = await Promise.all([
     cargasDelPeriodo(supabase, fechaDesde, fechaHasta, productoId || undefined),
     estadoAhora(supabase),
     cadenaFrio(supabase, fechaDesde, fechaHasta),
-    viajesConAlertaEnPeriodo(supabase, fechaDesde, fechaHasta),
+    alertasDelPeriodo(supabase, fechaDesde, fechaHasta),
     supabase.from("productos").select("*").order("nombre"),
   ]);
 
   const productos = (productosData ?? []) as Producto[];
+  const viajesAlerta = viajesConAlerta(idsAlertas);
+  const detalleFrio = detalleCadenaFrio(idsAlertas, ordenes);
 
   const porStatus: Record<Status, number> = {
     PENDIENTE: 0,
@@ -74,6 +79,8 @@ export default async function DashboardPage({
         <p className="text-sm text-brand-400 mt-0.5">Operación y trazabilidad de cargas</p>
       </div>
 
+      <TabsDashboard />
+
       <DashboardFilters
         fechaDesde={fechaDesde}
         fechaHasta={fechaHasta}
@@ -82,7 +89,7 @@ export default async function DashboardPage({
       />
 
       <BloqueAhora ahora={ahora} />
-      <CadenaFrioCard frio={frio} />
+      <CadenaFrioCard frio={frio} detalle={detalleFrio} />
       <PeriodoCard total={ordenes.length} porStatus={porStatus} desde={fechaDesde} hasta={fechaHasta} />
 
       <CargasPorDia datos={byFecha} hoy={hoy} />
@@ -91,13 +98,13 @@ export default async function DashboardPage({
         <TopBarras
           titulo="Top transportistas"
           filas={transportistas}
-          href={`/transportistas${sufijo}`}
+          href={`/dashboard/transportistas${sufijo}`}
           tipo="transportista"
         />
         <TopBarras
           titulo="Top clientes"
           filas={clientes}
-          href={`/clientes${sufijo}`}
+          href={`/dashboard/clientes${sufijo}`}
           tipo="cliente"
         />
       </div>

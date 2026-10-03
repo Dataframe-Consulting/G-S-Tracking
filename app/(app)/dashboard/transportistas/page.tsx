@@ -1,12 +1,14 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { Producto } from "@/lib/types";
-import { DashboardFilters } from "../dashboard/Filters";
+import { DashboardFilters } from "../Filters";
 import { TablaDetalle, type CargaDetalle } from "@/components/Dashboard/TablaDetalle";
+import { TabsDashboard } from "@/components/Dashboard/TabsDashboard";
 import {
   hoySonora,
   diasAtrasSonora,
   cargasDelPeriodo,
-  viajesConAlertaEnPeriodo,
+  alertasDelPeriodo,
+  viajesConAlerta,
   diasDelPeriodo,
   agrupar,
   transportistaDe,
@@ -26,12 +28,13 @@ export default async function TransportistasPage({
   const fechaHasta = searchParams.fecha_hasta ?? hoySonora();
   const productoId = searchParams.producto_id ?? "";
 
-  const [ordenes, viajesAlerta, { data: productosData }] = await Promise.all([
+  const [ordenes, idsAlertas, { data: productosData }] = await Promise.all([
     cargasDelPeriodo(supabase, fechaDesde, fechaHasta, productoId || undefined),
-    viajesConAlertaEnPeriodo(supabase, fechaDesde, fechaHasta),
+    alertasDelPeriodo(supabase, fechaDesde, fechaHasta),
     supabase.from("productos").select("*").order("nombre"),
   ]);
 
+  const viajesAlerta = viajesConAlerta(idsAlertas);
   const dias = diasDelPeriodo(fechaDesde, fechaHasta);
   const filas = agrupar(ordenes, "transportista", viajesAlerta, dias);
 
@@ -60,12 +63,14 @@ export default async function TransportistasPage({
         </p>
       </div>
 
+      <TabsDashboard />
+
       <DashboardFilters
         fechaDesde={fechaDesde}
         fechaHasta={fechaHasta}
         productoId={productoId}
         productos={(productosData ?? []) as Producto[]}
-        basePath="/transportistas"
+        basePath="/dashboard/transportistas"
       />
 
       <TablaDetalle tipo="transportista" filas={filas} cargas={cargas} opcionesFiltro={clientes} />

@@ -27,19 +27,6 @@ const icons: Record<string, React.ReactNode> = {
       <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/>
     </svg>
   ),
-  Transportistas: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 shrink-0">
-      <path d="M3 17h2M21 17h-2"/><rect x="5" y="17" width="14" height="0"/>
-      <path d="M4 7h11v10H4z"/><path d="M15 10h3.5L21 13v4h-6"/>
-      <circle cx="7.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/>
-    </svg>
-  ),
-  Clientes: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 shrink-0">
-      <path d="M3 21V9l6-4 6 4v12"/><path d="M15 21V11h6v10"/>
-      <path d="M7 12h2M7 16h2M18 15h0M18 18h0"/><path d="M2 21h20"/>
-    </svg>
-  ),
   Configuración: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 shrink-0">
       <circle cx="12" cy="12" r="3"/>
@@ -49,9 +36,7 @@ const icons: Record<string, React.ReactNode> = {
 };
 
 const NAV = [
-  { href: "/dashboard",      label: "Dashboard" },
-  { href: "/transportistas", label: "Transportistas" },
-  { href: "/clientes",       label: "Clientes" },
+  { href: "/dashboard",     label: "Dashboard" },
   { href: "/viajes",        label: "Viajes" },
   { href: "/alertas",       label: "Alertas" },
   { href: "/configuracion", label: "Configuración" }

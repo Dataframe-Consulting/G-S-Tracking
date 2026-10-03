@@ -73,9 +73,22 @@ export type Ahora = {
 export type CadenaFrio = {
   /** % de lecturas dentro de rango en el periodo. null si no hubo lecturas. */
   pctEnRango: number | null;
+  /** Mediciones de temperatura tomadas en el periodo. */
   lecturas: number;
-  /** Termógrafos asignados a viajes sin concluir que llevan horas sin reportar. */
-  termografosSinReportar: number;
+  /** De esas, cuántas cayeron dentro del rango del producto. */
+  enRango: number;
+};
+
+/** Desglose que abre el "Ver detalle" de cadena de frío.
+ *
+ *  Se arma con `alertas_log` y no con `lecturas_temperatura`: agrupar las
+ *  decenas de miles de lecturas por transportista exigiría paginar la API
+ *  (PostgREST corta en 1000 filas por petición). Las alertas son un buen
+ *  sustituto porque cada una representa 30 minutos continuos fuera de rango,
+ *  y pesan ~50 KB en un mes. */
+export type DetalleFrio = {
+  porTransportista: { nombre: string; alertas: number; viajes: number }[];
+  viajes: { viajeId: string; numero: number; transportista: string; cliente: string; alertas: number }[];
 };
 
 /** Nombre del transportista de una carga: concesionario del catálogo y, si no
@@ -170,62 +183,51 @@ export async function cadenaFrio(
 
   const [lecturas, enRango] = await Promise.all([contarLecturas(false), contarLecturas(true)]);
 
-  // Termógrafos asignados a viajes aún no concluidos que llevan >6 h sin reportar.
-  // Es el síntoma que dejó al viaje #0282 sin rastreo durante tres días.
-  const { data: termos } = await supabase
-    .from("termografos")
-    .select("id, viaje_id, ultima_actividad")
-    .eq("asignado", true)
-    .eq("deshabilitado", false)
-    .not("viaje_id", "is", null);
-
-  let termografosSinReportar = 0;
-  if (termos && termos.length > 0) {
-    const viajeIds = [...new Set(termos.map((t) => t.viaje_id as string))];
-    const { data: ovs } = await supabase
-      .from("ordenes_venta")
-      .select("viaje_id, status")
-      .in("viaje_id", viajeIds);
-
-    const concluido = new Map<string, boolean>();
-    for (const o of ovs ?? []) {
-      const vid = o.viaje_id as string;
-      const terminal = o.status === "ENTREGADO" || o.status === "RECHAZO_CALIDAD";
-      concluido.set(vid, (concluido.get(vid) ?? true) && terminal);
-    }
-
-    const corte = Date.now() - 6 * 3600_000;
-    for (const t of termos) {
-      if (concluido.get(t.viaje_id as string) !== false) continue; // viaje concluido o sin cargas
-      const ult = t.ultima_actividad ? new Date(t.ultima_actividad as string).getTime() : 0;
-      if (ult < corte) termografosSinReportar++;
-    }
-  }
-
   return {
     lecturas,
+    enRango,
     pctEnRango: lecturas > 0 ? Math.round((enRango / lecturas) * 1000) / 10 : null,
-    termografosSinReportar,
   };
 }
 
-/** Viajes que tuvieron al menos una alerta en el periodo. Se traen solo los
- *  `viaje_id` (unos 50 KB en 30 días) y se deduplican aquí. */
-export async function viajesConAlertaEnPeriodo(
+/**
+ * Trae TODOS los `viaje_id` de las alertas del periodo, paginando.
+ *
+ * Supabase corta cada respuesta en 1000 filas sin importar el `limit` que se
+ * pida, así que una sola consulta devolvía 1000 de las ~7,300 alertas de un mes
+ * y los conteos salían cortos. Se pagina con `range()` hasta agotar.
+ */
+export async function alertasDelPeriodo(
   supabase: SupabaseClient,
   desde: string,
   hasta: string
-): Promise<Set<string>> {
-  const { data } = await supabase
-    .from("alertas_log")
-    .select("viaje_id")
-    .gte("created_at", inicioDelDiaUTC(desde))
-    .lt("created_at", finDelDiaUTC(hasta))
-    .limit(50000);
+): Promise<string[]> {
+  const PAGINA = 1000;
+  const TOPE = 60_000; // ~8 meses de alertas al ritmo actual; corta por seguridad
+  const ini = inicioDelDiaUTC(desde);
+  const fin = finDelDiaUTC(hasta);
+  const out: string[] = [];
 
-  const set = new Set<string>();
-  for (const a of data ?? []) if (a.viaje_id) set.add(a.viaje_id as string);
-  return set;
+  for (let desdeFila = 0; desdeFila < TOPE; desdeFila += PAGINA) {
+    const { data, error } = await supabase
+      .from("alertas_log")
+      .select("viaje_id")
+      .gte("created_at", ini)
+      .lt("created_at", fin)
+      .order("created_at", { ascending: true })
+      .range(desdeFila, desdeFila + PAGINA - 1);
+
+    if (error || !data || data.length === 0) break;
+    for (const a of data) if (a.viaje_id) out.push(a.viaje_id as string);
+    if (data.length < PAGINA) break;
+  }
+  return out;
+}
+
+/** Viajes que tuvieron al menos una alerta. Recibe los ids ya paginados para
+ *  no volver a consultarlos: una página los pide una vez y los reusa. */
+export function viajesConAlerta(idsAlertas: string[]): Set<string> {
+  return new Set(idsAlertas);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,4 +317,56 @@ export function agrupar(
         .map(([n]) => n),
     }))
     .sort((a, b) => b.cargas - a.cargas);
+}
+
+/**
+ * Desglose de cadena de frío: dónde se concentran las excursiones.
+ *
+ * Usa `alertas_log` en vez de `lecturas_temperatura` porque agrupar las decenas
+ * de miles de lecturas por transportista obligaría a paginar la API (PostgREST
+ * devuelve máximo 1000 filas por petición). Cada alerta representa 30 minutos
+ * continuos fuera de rango, así que sirve de medida de qué tan mal estuvo cada
+ * viaje, y en un mes pesa unos 50 KB.
+ */
+export function detalleCadenaFrio(
+  idsAlertas: string[],
+  ordenes: OrdenDashboard[]
+): DetalleFrio {
+  const ids = idsAlertas;
+
+  const porViaje = new Map<string, number>();
+  for (const v of ids) porViaje.set(v, (porViaje.get(v) ?? 0) + 1);
+
+  // Contexto de cada viaje (transportista, cliente, número) desde las cargas que
+  // ya se trajeron para el periodo: no hace falta otra consulta.
+  const ctx = new Map<string, { numero: number; transportista: string; cliente: string }>();
+  for (const o of ordenes) {
+    if (!o.viaje?.id || ctx.has(o.viaje.id)) continue;
+    ctx.set(o.viaje.id, {
+      numero: o.viaje.numero,
+      transportista: transportistaDe(o),
+      cliente: o.cliente?.trim() || "Sin cliente",
+    });
+  }
+
+  const porTransp = new Map<string, { alertas: number; viajes: Set<string> }>();
+  const viajes: DetalleFrio["viajes"] = [];
+
+  for (const [viajeId, alertas] of porViaje) {
+    const c = ctx.get(viajeId);
+    if (!c) continue; // el viaje no pertenece al periodo filtrado
+    viajes.push({ viajeId, numero: c.numero, transportista: c.transportista, cliente: c.cliente, alertas });
+
+    const t = porTransp.get(c.transportista) ?? { alertas: 0, viajes: new Set<string>() };
+    t.alertas += alertas;
+    t.viajes.add(viajeId);
+    porTransp.set(c.transportista, t);
+  }
+
+  return {
+    porTransportista: Array.from(porTransp.entries())
+      .map(([nombre, t]) => ({ nombre, alertas: t.alertas, viajes: t.viajes.size }))
+      .sort((a, b) => b.alertas - a.alertas),
+    viajes: viajes.sort((a, b) => b.alertas - a.alertas),
+  };
 }
