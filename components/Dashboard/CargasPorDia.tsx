@@ -48,7 +48,7 @@ export function CargasPorDia({ datos, hoy }: { datos: DiaRow[]; hoy: string }) {
         <div className="py-10 text-center text-sm text-brand-400">Sin cargas en el periodo.</div>
       ) : (
         <ResponsiveContainer width="100%" height={190}>
-          <BarChart data={datos} margin={{ top: 4, right: 4, bottom: 0, left: -24 }} barCategoryGap="18%">
+          <BarChart data={datos} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap="18%">
             <CartesianGrid stroke="#eef2ef" vertical={false} />
             <XAxis
               dataKey="fecha"
@@ -64,7 +64,10 @@ export function CargasPorDia({ datos, hoy }: { datos: DiaRow[]; hoy: string }) {
               tick={{ fontSize: 10.5, fill: "#9AA79F" }}
               tickLine={false}
               axisLine={false}
-              width={34}
+              // Ancho suficiente para los números: con un margen izquierdo
+              // negativo el eje quedaba fuera del lienzo y las cifras salían
+              // cortadas por la mitad.
+              width={30}
             />
             <Tooltip
               cursor={{ fill: "rgba(29,61,41,.05)" }}

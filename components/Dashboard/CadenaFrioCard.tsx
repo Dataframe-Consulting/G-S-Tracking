@@ -68,7 +68,7 @@ export function CadenaFrioCard({ frio, detalle }: { frio: CadenaFrio; detalle: D
                   title={`Fuera de rango: ${n(fuera)}`}
                 />
               </div>
-              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs mb-3">
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
                 <span className="inline-flex items-center gap-1.5 text-brand-500">
                   <span className="w-2.5 h-2.5 rounded-sm bg-brand-600" />
                   Dentro de rango
@@ -82,13 +82,6 @@ export function CadenaFrioCard({ frio, detalle }: { frio: CadenaFrio; detalle: D
                   </b>
                 </span>
               </div>
-              <p className="text-[13px] text-brand-600 leading-relaxed max-w-prose">
-                De las <b className="font-medium text-brand-900">{n(frio.lecturas)}</b> mediciones de
-                temperatura que tomaron los termógrafos en este periodo,{" "}
-                <b className="font-medium text-brand-900">{n(frio.enRango)}</b> estuvieron dentro del
-                rango permitido del producto y{" "}
-                <b className="font-medium text-brand-900">{n(fuera)}</b> fuera.
-              </p>
             </div>
           </div>
         )}
