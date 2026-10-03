@@ -1,0 +1,80 @@
+import { createServerSupabase } from "@/lib/supabase/server";
+import type { Producto } from "@/lib/types";
+import { DashboardFilters } from "../dashboard/Filters";
+import { TablaDetalle, type CargaDetalle } from "@/components/Dashboard/TablaDetalle";
+import {
+  hoySonora,
+  diasAtrasSonora,
+  cargasDelPeriodo,
+  viajesConAlertaEnPeriodo,
+  diasDelPeriodo,
+  agrupar,
+  transportistaDe,
+  productosDe,
+} from "@/lib/dashboard";
+
+export const dynamic = "force-dynamic";
+
+export default async function TransportistasPage({
+  searchParams,
+}: {
+  searchParams: { fecha_desde?: string; fecha_hasta?: string; producto_id?: string; ver?: string };
+}) {
+  const supabase = createServerSupabase();
+
+  const fechaDesde = searchParams.fecha_desde ?? diasAtrasSonora(29);
+  const fechaHasta = searchParams.fecha_hasta ?? hoySonora();
+  const productoId = searchParams.producto_id ?? "";
+
+  const [ordenes, viajesAlerta, { data: productosData }] = await Promise.all([
+    cargasDelPeriodo(supabase, fechaDesde, fechaHasta, productoId || undefined),
+    viajesConAlertaEnPeriodo(supabase, fechaDesde, fechaHasta),
+    supabase.from("productos").select("*").order("nombre"),
+  ]);
+
+  const dias = diasDelPeriodo(fechaDesde, fechaHasta);
+  const filas = agrupar(ordenes, "transportista", viajesAlerta, dias);
+
+  const cargas: CargaDetalle[] = ordenes.map((o) => ({
+    id: o.id,
+    fecha: o.fecha_carga,
+    ovRef: o.ov_ref,
+    cliente: o.cliente?.trim() || "Sin cliente",
+    transportista: transportistaDe(o),
+    productos: productosDe(o),
+    status: o.status,
+    viajeNumero: o.viaje?.numero ?? null,
+    viajeConAlerta: !!(o.viaje?.id && viajesAlerta.has(o.viaje.id)),
+  }));
+
+  const clientes = Array.from(new Set(cargas.map((c) => c.cliente))).sort();
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-display font-bold text-2xl text-brand-900 tracking-tight">
+          Transportistas
+        </h1>
+        <p className="text-sm text-brand-400 mt-0.5">
+          Volumen, alertas y rechazos por transportista
+        </p>
+      </div>
+
+      <DashboardFilters
+        fechaDesde={fechaDesde}
+        fechaHasta={fechaHasta}
+        productoId={productoId}
+        productos={(productosData ?? []) as Producto[]}
+        basePath="/transportistas"
+      />
+
+      <TablaDetalle tipo="transportista" filas={filas} cargas={cargas} opcionesFiltro={clientes} />
+
+      <p className="text-xs text-brand-400">
+        La columna dice <span className="font-medium text-brand-500">viajes con alerta</span> y no
+        cargas: las alertas de temperatura se registran por viaje, así que un viaje con varias
+        cargas no distingue cuál la disparó.
+      </p>
+    </div>
+  );
+}

@@ -12,11 +12,14 @@ export function DashboardFilters({
   fechaHasta,
   productoId,
   productos,
+  basePath = "/dashboard",
 }: {
   fechaDesde: string;
   fechaHasta: string;
   productoId: string;
   productos: Producto[];
+  /** Permite reusar los mismos filtros en Transportistas y Clientes. */
+  basePath?: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -25,7 +28,7 @@ export function DashboardFilters({
     const next = new URLSearchParams(params.toString());
     if (value) next.set(key, value);
     else next.delete(key);
-    router.push(`/dashboard?${next.toString()}`);
+    router.push(`${basePath}?${next.toString()}`);
   }
 
   function updateRango(desde: string, hasta: string) {
@@ -34,7 +37,7 @@ export function DashboardFilters({
     else next.delete("fecha_desde");
     if (hasta) next.set("fecha_hasta", hasta);
     else next.delete("fecha_hasta");
-    router.push(`/dashboard?${next.toString()}`);
+    router.push(`${basePath}?${next.toString()}`);
   }
 
   return (
