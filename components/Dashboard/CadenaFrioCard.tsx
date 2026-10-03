@@ -15,14 +15,12 @@ export function CadenaFrioCard({ frio, detalle }: { frio: CadenaFrio; detalle: D
   const [abierto, setAbierto] = useState(false);
   const pct = frio.pctEnRango;
   const fuera = frio.lecturas - frio.enRango;
-
-  // Semáforo sobrio, con los colores que ya usa la app.
-  const tono =
-    pct == null ? "text-brand-300" : pct >= 85 ? "text-brand-700" : pct >= 60 ? "text-accent" : "text-red-600";
-  const barra =
-    pct == null ? "bg-brand-200" : pct >= 85 ? "bg-brand-700" : pct >= 60 ? "bg-accent" : "bg-red-500";
-
   const n = (x: number) => x.toLocaleString("es-MX");
+
+  // El color significa siempre lo mismo: verde = dentro de rango, rojo = fuera.
+  // El número es el % de cumplimiento, así que va en verde aunque sea bajo: la
+  // severidad se lee en cuánto rojo tiene la barra, no en el color del número.
+  const pctFuera = frio.lecturas > 0 ? Math.round((fuera / frio.lecturas) * 1000) / 10 : 0;
 
   return (
     <section>
@@ -48,17 +46,41 @@ export function CadenaFrioCard({ frio, detalle }: { frio: CadenaFrio; detalle: D
         ) : (
           <div className="grid lg:grid-cols-[auto_1fr] gap-x-8 gap-y-4 items-start">
             <div>
-              <div className={`font-display font-extrabold text-[46px] leading-none tabular-nums ${tono}`}>
+              <div className="font-display font-extrabold text-[46px] leading-none tabular-nums text-brand-700">
                 {pct}%
               </div>
               <div className="text-xs font-medium text-brand-500 mt-1.5">dentro de rango</div>
             </div>
 
             <div className="min-w-0">
-              {/* Barra: proporción en rango vs fuera de rango. */}
-              <div className="flex gap-0.5 h-2.5 mb-3">
-                <div className={`${barra} rounded-sm`} style={{ flexGrow: frio.enRango || 1 }} />
-                <div className="bg-brand-100 rounded-sm" style={{ flexGrow: fuera || 1 }} />
+              {/* Anchos en porcentaje, no flex-grow: así la barra refleja la
+                  proporción exacta y no depende de cómo el navegador reparta
+                  el espacio libre. */}
+              <div className="flex h-2.5 rounded-sm overflow-hidden bg-brand-50 mb-2">
+                <div
+                  className="bg-brand-600"
+                  style={{ width: `${pct ?? 0}%` }}
+                  title={`Dentro de rango: ${n(frio.enRango)}`}
+                />
+                <div
+                  className="bg-red-400"
+                  style={{ width: `${pctFuera}%` }}
+                  title={`Fuera de rango: ${n(fuera)}`}
+                />
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs mb-3">
+                <span className="inline-flex items-center gap-1.5 text-brand-500">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-brand-600" />
+                  Dentro de rango
+                  <b className="font-medium text-brand-900 tabular-nums">{n(frio.enRango)}</b>
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-brand-500">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-red-400" />
+                  Fuera de rango
+                  <b className="font-medium text-brand-900 tabular-nums">
+                    {n(fuera)} · {pctFuera}%
+                  </b>
+                </span>
               </div>
               <p className="text-[13px] text-brand-600 leading-relaxed max-w-prose">
                 De las <b className="font-medium text-brand-900">{n(frio.lecturas)}</b> mediciones de
