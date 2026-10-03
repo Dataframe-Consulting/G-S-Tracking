@@ -73,7 +73,7 @@ export default async function TransportistasPage({
         basePath="/dashboard/transportistas"
       />
 
-      <TablaDetalle tipo="transportista" filas={filas} cargas={cargas} opcionesFiltro={clientes} />
+      <TablaDetalle tipo="transportista" filas={filas} cargas={cargas} opcionesFiltro={clientes} dias={dias} />
 
       <p className="text-xs text-brand-400">
         La columna dice <span className="font-medium text-brand-500">viajes con alerta</span> y no

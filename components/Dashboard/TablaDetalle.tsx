@@ -51,6 +51,7 @@ export function TablaDetalle({
   filas,
   cargas,
   opcionesFiltro,
+  dias,
 }: {
   tipo: "transportista" | "cliente";
   filas: FilaAgrupada[];
@@ -58,6 +59,8 @@ export function TablaDetalle({
   cargas: CargaDetalle[];
   /** Clientes (si tipo=transportista) o transportistas (si tipo=cliente). */
   opcionesFiltro: string[];
+  /** Días del periodo, en el mismo orden que `serie`. Para el tooltip. */
+  dias: string[];
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -233,6 +236,7 @@ export function TablaDetalle({
           tipo={tipo}
           fila={ficha}
           cargas={cargasFicha}
+          dias={dias}
           onClose={cerrar}
         />
       )}
@@ -246,11 +250,13 @@ function FichaModal({
   tipo,
   fila,
   cargas,
+  dias,
   onClose,
 }: {
   tipo: "transportista" | "cliente";
   fila: FilaAgrupada;
   cargas: CargaDetalle[];
+  dias: string[];
   onClose: () => void;
 }) {
   const esTransp = tipo === "transportista";
@@ -315,13 +321,16 @@ function FichaModal({
             <div className="text-[11px] uppercase tracking-widest text-brand-400 font-medium mb-2">
               Cargas por día
             </div>
-            <div className="flex items-end gap-[3px] h-20 border-b border-brand-100">
+            {/* Las barras reparten TODO el ancho disponible. Con un max-width
+                fijo se amontonaban a la izquierda y la gráfica parecía cortada
+                en los periodos de pocos días. */}
+            <div className="flex items-end gap-[2px] h-20 border-b border-brand-100">
               {fila.serie.map((n, i) => (
                 <div
                   key={i}
-                  className={`flex-1 max-w-[12px] rounded-t-sm ${n === maxSerie && n > 0 ? "bg-brand-900" : "bg-brand-300"}`}
+                  className={`flex-1 min-w-0 rounded-t-sm ${n === maxSerie && n > 0 ? "bg-brand-900" : "bg-brand-300"}`}
                   style={{ height: `${n > 0 ? Math.max(6, (n / maxSerie) * 100) : 2}%` }}
-                  title={`${n} carga${n === 1 ? "" : "s"}`}
+                  title={`${dias[i] ? fmtFecha(dias[i]) + " · " : ""}${n} carga${n === 1 ? "" : "s"}`}
                 />
               ))}
             </div>

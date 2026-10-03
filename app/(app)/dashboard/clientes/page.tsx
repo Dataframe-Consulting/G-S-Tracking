@@ -71,7 +71,7 @@ export default async function ClientesPage({
         basePath="/dashboard/clientes"
       />
 
-      <TablaDetalle tipo="cliente" filas={filas} cargas={cargas} opcionesFiltro={transportistas} />
+      <TablaDetalle tipo="cliente" filas={filas} cargas={cargas} opcionesFiltro={transportistas} dias={dias} />
     </div>
   );
 }
