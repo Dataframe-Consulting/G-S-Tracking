@@ -18,6 +18,7 @@
  */
 
 import https from "node:https";
+import { locationIdCopeland, ubicacionCopeland } from "./copelandUbicaciones";
 
 const BASE_URL = "https://api.oversight.copeland.com/edi";
 
@@ -85,6 +86,7 @@ export interface DefineTripParams {
   trackerId: string;         // Número de serie del dispositivo Copeland
   originName: string;        // lugar_inicio del viaje
   destinationName: string;   // lugar_fin del viaje
+  viajeNumero: number | string; // para el LocationID único de cada parada
   scheduledStartUTC?: string | null;
   scheduledEndUTC?: string | null;
   tempLowCritical?: number | null;
@@ -133,6 +135,8 @@ export async function defineTrip(
 ): Promise<{ success: boolean; error?: string; rateLimited?: boolean }> {
   if (process.env.COPELAND_SIMULATE !== "false") return { success: true };
 
+  const orig = ubicacionCopeland(params.originName);
+  const dest = ubicacionCopeland(params.destinationName);
   const body = {
     TripID: params.tripId,
     TrackerID: params.trackerId,
@@ -141,22 +145,24 @@ export async function defineTrip(
     Locations: [
       {
         LocationName: params.originName.slice(0, 50),
-        LocationID: "ORIG",
+        LocationID: locationIdCopeland(params.viajeNumero, "ORIG"),
         Address1: params.originName.slice(0, 100),
-        City: params.originName.slice(0, 50),
-        Zip: "00000",
-        Country: "MX",
+        City: orig.city,
+        ...(orig.state ? { State: orig.state } : {}),
+        Zip: orig.zip,
+        Country: orig.country,
         LocationType: 0, // pick
         StopDateUTC: params.scheduledStartUTC ?? null,
         StopTypeCode: null,
       },
       {
         LocationName: params.destinationName.slice(0, 50),
-        LocationID: "DEST",
+        LocationID: locationIdCopeland(params.viajeNumero, "DEST"),
         Address1: params.destinationName.slice(0, 100),
-        City: params.destinationName.slice(0, 50),
-        Zip: "00000",
-        Country: "MX",
+        City: dest.city,
+        ...(dest.state ? { State: dest.state } : {}),
+        Zip: dest.zip,
+        Country: dest.country,
         LocationType: 1, // delivery
         StopDateUTC: params.scheduledEndUTC ?? null,
         StopTypeCode: null,

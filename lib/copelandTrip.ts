@@ -86,6 +86,7 @@ export async function definirTripConReintento(
       trackerId,
       originName: viaje.lugar_inicio,
       destinationName: viaje.lugar_fin,
+      viajeNumero: viaje.numero,
       scheduledStartUTC: inicioDeDiaUTC(viaje.fecha_inicio),
       scheduledEndUTC: finDeDiaUTC(viaje.fecha_fin),
     });
